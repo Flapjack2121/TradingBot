@@ -1,7 +1,6 @@
 import time
 import numpy as np
 import pandas as pd
-import pandas_ta as ta
 import plotly.graph_objects as go
 import streamlit as st
 import yfinance as yf
@@ -95,27 +94,47 @@ def fetch(ticker: str, period: str, interval: str) -> pd.DataFrame:
     return df
 
 
+def _ema(series: pd.Series, window: int) -> pd.Series:
+    return series.ewm(span=window, adjust=False).mean()
+
+
+def _rsi(series: pd.Series, window: int = 14) -> pd.Series:
+    delta = series.diff()
+    gain = delta.clip(lower=0)
+    loss = -delta.clip(upper=0)
+    avg_gain = gain.ewm(com=window - 1, adjust=False).mean()
+    avg_loss = loss.ewm(com=window - 1, adjust=False).mean()
+    rs = avg_gain / avg_loss.replace(0, np.nan)
+    return 100 - (100 / (1 + rs))
+
+
+def _atr(high: pd.Series, low: pd.Series, close: pd.Series, window: int = 14) -> pd.Series:
+    prev_close = close.shift(1)
+    tr = pd.concat([
+        high - low,
+        (high - prev_close).abs(),
+        (low - prev_close).abs(),
+    ], axis=1).max(axis=1)
+    return tr.ewm(com=window - 1, adjust=False).mean()
+
+
 def compute_indicators(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
     close = df["Close"].squeeze()
+    high = df["High"].squeeze()
+    low = df["Low"].squeeze()
 
-    # Trend – 200 EMA
-    df["ema200"] = ta.ema(close, length=200)
-    df["ema50"] = ta.ema(close, length=50)
+    df["ema200"] = _ema(close, 200)
+    df["ema50"] = _ema(close, 50)
+    df["rsi"] = _rsi(close, 14)
 
-    # Momentum – RSI
-    df["rsi"] = ta.rsi(close, length=14)
+    sma20 = close.rolling(20).mean()
+    std20 = close.rolling(20).std()
+    df["bb_mid"] = sma20
+    df["bb_upper"] = sma20 + 2 * std20
+    df["bb_lower"] = sma20 - 2 * std20
 
-    # Volatility – Bollinger Bands
-    bb = ta.bbands(close, length=20, std=2.0)
-    if bb is not None:
-        df["bb_upper"] = bb.iloc[:, 0]
-        df["bb_mid"] = bb.iloc[:, 1]
-        df["bb_lower"] = bb.iloc[:, 2]
-
-    # ATR for stop-loss sizing
-    atr = ta.atr(df["High"].squeeze(), df["Low"].squeeze(), close, length=14)
-    df["atr"] = atr
+    df["atr"] = _atr(high, low, close, 14)
 
     return df
 
