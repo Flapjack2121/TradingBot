@@ -1,0 +1,13 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+.pytest_cache/
+
+# Project-generated
+data/cache/
+database/*.db
+reports/output/
+*.parquet
+*.log

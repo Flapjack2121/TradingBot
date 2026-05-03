@@ -1,0 +1,74 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Trading Signal Dashboard — central configuration
+# ─────────────────────────────────────────────────────────────────────────────
+
+universe:
+  # "sp500" = full S&P 500 (auto-fetched), or supply explicit list under tickers.
+  source: sp500
+  tickers: []
+  benchmark: SPY
+  max_symbols: 100        # cap for daily scan to keep runtime sane
+
+data:
+  history_period: "2y"
+  interval: "1d"
+  cache_dir: "data/cache"
+  cache_ttl_hours: 12     # treat parquet as stale after this
+  use_adjusted: true
+
+indicators:
+  rsi: [2, 14]
+  ema: [9, 21, 50, 200]
+  bollinger: { window: 20, std: 2 }
+  atr: 14
+  volume_sma: 20
+  macd: { fast: 12, slow: 26, signal: 9 }
+
+regime:
+  spy_sma: 200            # bull if SPY close > SMA(200)
+
+risk:
+  account_size: 10000
+  risk_per_trade: 0.01    # 1% of equity
+  atr_stop_multiplier: 2.0
+  take_profit_r_multiple: 2.0   # TP at 2R by default
+  max_open_positions: 10
+
+strategies:
+  enabled: [triple_confirmation, mean_reversion, breakout]
+  triple_confirmation:
+    rsi_threshold: 50
+    bb_touch_tolerance: 0.01
+  mean_reversion:
+    rsi_period: 2
+    rsi_oversold: 10
+    trend_filter_ema: 200
+  breakout:
+    donchian_window: 20
+    volume_multiplier: 1.5
+
+backtest:
+  initial_cash: 10000
+  commission_pct: 0.0005   # 5 bps per side
+  slippage_pct: 0.0005
+
+notifications:
+  enabled: false
+  channels: []             # one or more of: email, telegram
+  email:
+    smtp_host: ""
+    smtp_port: 587
+    username: ""
+    password: ""
+    from_addr: ""
+    to_addrs: []
+  telegram:
+    bot_token: ""
+    chat_id: ""
+
+database:
+  path: "database/trades.db"
+
+dashboard:
+  title: "Trading Signal Dashboard"
+  refresh_seconds: 300
