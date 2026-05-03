@@ -2,7 +2,7 @@
 
 Run with:
 
-    streamlit run dashboard/app.py
+    streamlit run bot.py
 """
 from __future__ import annotations
 
@@ -12,8 +12,8 @@ from pathlib import Path
 import pandas as pd
 import streamlit as st
 
-# Ensure project root is on sys.path when launched via `streamlit run dashboard/app.py`.
-ROOT = Path(__file__).resolve().parent.parent
+# Ensure project root is on sys.path when launched via `streamlit run bot.py`.
+ROOT = Path(__file__).resolve().parent
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
@@ -40,7 +40,7 @@ st.set_page_config(
 )
 
 # Inject CSS once.
-css_path = Path(__file__).parent / "styles.css"
+css_path = Path(__file__).parent / "dashboard" / "styles.css"
 if css_path.exists():
     st.markdown(f"<style>{css_path.read_text()}</style>", unsafe_allow_html=True)
 
