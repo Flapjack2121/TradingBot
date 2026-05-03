@@ -1,6 +1,7 @@
-[server]
-port = 8503
-headless = false
+# Theme only — server settings (port, headless) are intentionally omitted
+# so Streamlit Community Cloud can manage the port itself.
+# When running locally on a busy machine, pass `--server.port 8503` to
+# `streamlit run bot.py`.
 
 [theme]
 base = "dark"

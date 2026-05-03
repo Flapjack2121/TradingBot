@@ -9,9 +9,12 @@ pyyaml>=6.0
 schedule>=1.2.0
 pyarrow>=14.0.0
 requests>=2.31.0
-python-telegram-bot>=21.0
-pytest>=8.0.0
+lxml>=4.9.0
+html5lib>=1.1
+beautifulsoup4>=4.12.0
 
-# Optional / heavy — install manually if your environment supports them.
+# Dev / optional — uncomment locally if needed.
+# pytest>=8.0.0
+# python-telegram-bot>=21.0
 # pandas-ta>=0.3.14b
 # vectorbt>=0.26.0
