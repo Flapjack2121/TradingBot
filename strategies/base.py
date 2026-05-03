@@ -18,11 +18,17 @@ from typing import Any
 import pandas as pd
 
 
+SIDE_BUY = "BUY"
+SIDE_WAIT = "WAIT"
+SIDE_AVOID = "AVOID"
+VALID_SIDES = {SIDE_BUY, SIDE_WAIT, SIDE_AVOID}
+
+
 @dataclass
 class Signal:
     ticker: str
     strategy: str
-    side: str              # "BUY" or "WAIT" (long-only for now)
+    side: str              # "BUY", "WAIT", or "AVOID" (long-only for now)
     entry: float | None = None
     stop_loss: float | None = None
     take_profit: float | None = None
@@ -33,12 +39,22 @@ class Signal:
     position_value: float = 0.0
     r_multiple: float | None = None
     reasons: dict[str, bool] = field(default_factory=dict)
+    rationale: str = ""        # human-readable one-liner explaining the call
+    asset_class: str = ""      # e.g. "Stocks US", "Forex", "Commodity"
     extras: dict[str, Any] = field(default_factory=dict)
     as_of: pd.Timestamp | None = None
 
     @property
     def is_actionable(self) -> bool:
-        return self.side == "BUY" and self.entry is not None and self.stop_loss is not None
+        return (
+            self.side == SIDE_BUY
+            and self.entry is not None
+            and self.stop_loss is not None
+        )
+
+    @property
+    def is_avoid(self) -> bool:
+        return self.side == SIDE_AVOID
 
     def to_dict(self) -> dict:
         d = asdict(self)
@@ -85,6 +101,7 @@ class BaseStrategy(ABC):
     @staticmethod
     def _empty(ticker: str, name: str, reason: str = "insufficient data") -> Signal:
         return Signal(
-            ticker=ticker, strategy=name, side="WAIT",
+            ticker=ticker, strategy=name, side=SIDE_WAIT,
             reasons={reason: False},
+            rationale=f"No signal — {reason}.",
         )

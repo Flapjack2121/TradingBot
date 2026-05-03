@@ -8,6 +8,8 @@ import streamlit as st
 def _style_signal(val: str) -> str:
     if val == "BUY":
         return "background-color:#1a3a2a;color:#3fb950;font-weight:bold;border-radius:4px;padding:2px 8px;"
+    if val == "AVOID":
+        return "background-color:#3a1a1a;color:#f85149;font-weight:bold;border-radius:4px;padding:2px 8px;"
     if val == "WAIT":
         return "background-color:#2a2a2a;color:#8b949e;border-radius:4px;padding:2px 8px;"
     return "color:#8b949e;"
@@ -26,7 +28,15 @@ def render_signal_table(df: pd.DataFrame) -> None:
         if col in show.columns:
             show[col] = show[col].apply(lambda v: f"{v:,.2f}" if pd.notna(v) else "—")
     if "As Of" in show.columns:
-        show["As Of"] = pd.to_datetime(show["As Of"]).dt.strftime("%Y-%m-%d")
+        show["As Of"] = pd.to_datetime(show["As Of"], errors="coerce").dt.strftime("%Y-%m-%d")
+
+    column_config = {}
+    if "Rationale" in show.columns:
+        column_config["Rationale"] = st.column_config.TextColumn(
+            "Rationale", help="Why this verdict was reached", width="large",
+        )
+    if "Asset Class" in show.columns:
+        column_config["Asset Class"] = st.column_config.TextColumn("Asset Class", width="small")
 
     styled = (
         show.style
@@ -43,4 +53,5 @@ def render_signal_table(df: pd.DataFrame) -> None:
             ]},
         ])
     )
-    st.dataframe(styled, use_container_width=True, hide_index=True)
+    st.dataframe(styled, use_container_width=True, hide_index=True,
+                  column_config=column_config)

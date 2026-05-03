@@ -1,5 +1,5 @@
 """Signal generation strategies and the aggregating engine."""
-from .base import BaseStrategy, Signal
+from .base import BaseStrategy, Signal, SIDE_BUY, SIDE_WAIT, SIDE_AVOID
 from .triple_confirmation import TripleConfirmation
 from .mean_reversion import MeanReversion
 from .breakout import DonchianBreakout
@@ -11,7 +11,14 @@ REGISTRY: dict[str, type[BaseStrategy]] = {
     "breakout": DonchianBreakout,
 }
 
+STRATEGY_LABELS: dict[str, str] = {
+    "triple_confirmation": "🎯 Triple Confirmation",
+    "mean_reversion":      "🔄 RSI-2 Mean Reversion",
+    "breakout":            "🚀 Donchian Breakout",
+}
+
 __all__ = [
-    "BaseStrategy", "Signal", "TripleConfirmation", "MeanReversion",
-    "DonchianBreakout", "SignalEngine", "REGISTRY",
+    "BaseStrategy", "Signal", "SIDE_BUY", "SIDE_WAIT", "SIDE_AVOID",
+    "TripleConfirmation", "MeanReversion", "DonchianBreakout",
+    "SignalEngine", "REGISTRY", "STRATEGY_LABELS",
 ]

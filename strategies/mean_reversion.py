@@ -6,13 +6,16 @@ uptrend filter. Specifically:
 1. Trend filter: close > EMA(``trend_filter_ema``).
 2. Setup: RSI(``rsi_period``) closes below ``rsi_oversold``.
 
-The idea is to fade short-term weakness in established uptrends.
+Verdicts:
+- **BUY**   trend up + RSI(2) deeply oversold,
+- **AVOID** trend down — fading weakness in downtrends is a falling-knife trap,
+- **WAIT**  trend up but no oversold dip yet.
 """
 from __future__ import annotations
 
 import pandas as pd
 
-from .base import BaseStrategy, Signal
+from .base import BaseStrategy, Signal, SIDE_AVOID, SIDE_BUY, SIDE_WAIT
 
 
 class MeanReversion(BaseStrategy):
@@ -48,19 +51,39 @@ class MeanReversion(BaseStrategy):
         cond_oversold = rsi_short < rsi_oversold
 
         confidence = sum([cond_trend, cond_oversold]) / 2.0
-        side = "BUY" if cond_trend and cond_oversold else "WAIT"
+
+        if cond_trend and cond_oversold:
+            side = SIDE_BUY
+            rationale = (
+                f"Setup: uptrend (close {price:.2f} > EMA{trend_ema} {ema_long:.2f}) and "
+                f"RSI({rsi_period}) deeply oversold at {rsi_short:.1f} (< {rsi_oversold}). "
+                "Mean reversion bounce expected."
+            )
+        elif not cond_trend:
+            side = SIDE_AVOID
+            rationale = (
+                f"Downtrend (close {price:.2f} below EMA{trend_ema} {ema_long:.2f}) — "
+                "no mean-reversion long; fading weakness here is a falling-knife trap."
+            )
+        else:
+            side = SIDE_WAIT
+            rationale = (
+                f"Uptrend OK but RSI({rsi_period}) is {rsi_short:.1f}, not yet oversold "
+                f"(< {rsi_oversold}). Wait for a sharp dip."
+            )
 
         return Signal(
             ticker=ticker,
             strategy=self.name,
             side=side,
-            entry=price if side == "BUY" else None,
+            entry=price if side == SIDE_BUY else None,
             atr=atr_val,
             confidence=confidence,
             reasons={
                 f"trend (close > EMA{trend_ema})": cond_trend,
                 f"RSI({rsi_period}) < {rsi_oversold}": cond_oversold,
             },
+            rationale=rationale,
             extras={f"rsi_{rsi_period}": rsi_short, ema_col: ema_long},
             as_of=df.index[-1],
         )

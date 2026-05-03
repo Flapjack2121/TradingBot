@@ -7,12 +7,17 @@ bar:
 2. **Momentum** — RSI(14) crosses 50 from below: fresh bullish energy.
 3. **Volatility / value** — Close within ``bb_touch_tolerance`` of the
    lower Bollinger Band: the pull-back is statistically deep.
+
+We emit:
+- **BUY**   when all three conditions are true,
+- **AVOID** when the trend filter fails (no longs in established downtrends),
+- **WAIT**  in every other "uptrend but setup not present" case.
 """
 from __future__ import annotations
 
 import pandas as pd
 
-from .base import BaseStrategy, Signal
+from .base import BaseStrategy, Signal, SIDE_AVOID, SIDE_BUY, SIDE_WAIT
 
 
 class TripleConfirmation(BaseStrategy):
@@ -46,13 +51,37 @@ class TripleConfirmation(BaseStrategy):
         cond_value = price <= bb_lower * (1 + tol)
 
         confidence = sum([cond_trend, cond_momentum, cond_value]) / 3.0
-        side = "BUY" if cond_trend and cond_momentum and cond_value else "WAIT"
 
-        sig = Signal(
+        if cond_trend and cond_momentum and cond_value:
+            side = SIDE_BUY
+            rationale = (
+                f"All 3 conditions met: uptrend (close {price:.2f} > EMA200 {ema200:.2f}), "
+                f"RSI crossed {rsi_threshold} ({rsi_prev:.1f} → {rsi_now:.1f}), "
+                f"and price near lower BB ({bb_lower:.2f})."
+            )
+        elif not cond_trend:
+            side = SIDE_AVOID
+            rationale = (
+                f"Long-term downtrend — close {price:.2f} below EMA200 {ema200:.2f}. "
+                "No long setup; wait for trend to repair."
+            )
+        else:
+            missing = []
+            if not cond_momentum:
+                missing.append(f"momentum (RSI {rsi_now:.1f}, no fresh cross of {rsi_threshold})")
+            if not cond_value:
+                missing.append(f"value (close {price:.2f} > lower BB {bb_lower:.2f})")
+            side = SIDE_WAIT
+            rationale = (
+                f"Uptrend intact (close {price:.2f} > EMA200 {ema200:.2f}), but waiting for "
+                + " and ".join(missing) + "."
+            )
+
+        return Signal(
             ticker=ticker,
             strategy=self.name,
             side=side,
-            entry=price if side == "BUY" else None,
+            entry=price if side == SIDE_BUY else None,
             atr=atr_val,
             confidence=confidence,
             reasons={
@@ -60,7 +89,7 @@ class TripleConfirmation(BaseStrategy):
                 f"momentum (RSI cross {rsi_threshold})": cond_momentum,
                 "value (touch lower BB)": cond_value,
             },
+            rationale=rationale,
             extras={"rsi": rsi_now, "ema200": ema200, "bb_lower": bb_lower},
             as_of=df.index[-1],
         )
-        return sig

@@ -69,6 +69,7 @@ class SignalEngine:
         for s in signals:
             rows.append({
                 "Ticker": s.ticker,
+                "Asset Class": s.asset_class or "—",
                 "Strategy": s.strategy,
                 "Signal": s.side,
                 "Confidence": round(s.confidence, 2),
@@ -80,6 +81,15 @@ class SignalEngine:
                 "Risk €": s.risk_amount,
                 "Position €": s.position_value,
                 "R": s.r_multiple,
+                "Rationale": s.rationale,
                 "As Of": s.as_of,
             })
         return pd.DataFrame(rows)
+
+    @staticmethod
+    def apply_asset_classes(signals: Iterable[Signal],
+                             ticker_to_class: dict[str, str]) -> None:
+        """Tag each signal with its asset class in-place."""
+        for s in signals:
+            if not s.asset_class:
+                s.asset_class = ticker_to_class.get(s.ticker, "")
