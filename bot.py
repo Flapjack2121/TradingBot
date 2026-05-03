@@ -309,7 +309,7 @@ def render_strategy_tab(strategy_name: str, df_all: pd.DataFrame) -> None:
 tab_names = (
     ["📊 Overview"]
     + [STRATEGY_LABELS.get(n, n) for n in enabled]
-    + ["🎯 Actionable", "🕯️ Chart", "📒 Journal", "🧪 Backtest"]
+    + ["🎯 Actionable", "🕯️ Chart", "📒 Journal", "🧪 Backtest", "📚 Strategy Lab"]
 )
 tabs = st.tabs(tab_names)
 
@@ -463,6 +463,161 @@ with tabs[offset + 3]:
                 st.markdown("##### Trades")
                 st.dataframe(bt_res.trades, use_container_width=True, hide_index=True)
 
+# Strategy Lab ------------------------------------------------------------
+with tabs[offset + 4]:
+    from backtest import StrategyLab
+
+    st.markdown("### 📚 Strategy Lab — multi-year, multi-ticker validation")
+    st.caption(
+        "Run a strategy across a basket of tickers over 5–20 years and "
+        "see aggregated performance: win rate, CAGR, Sharpe, profit factor, "
+        "drawdown, and per-ticker breakdown."
+    )
+
+    bt_cfg = cfg.get("backtest", {})
+
+    col1, col2, col3, col4 = st.columns(4)
+    with col1:
+        lab_strat_name = st.selectbox(
+            "Strategy", list(REGISTRY.keys()), key="lab_strat",
+            format_func=lambda n: STRATEGY_LABELS.get(n, n),
+        )
+    with col2:
+        lab_period = st.selectbox(
+            "History", ["5y", "10y", "15y", "20y", "max"],
+            index=1, key="lab_period",
+        )
+    with col3:
+        lab_universe_key = st.selectbox(
+            "Basket", list(U.UNIVERSES.keys()),
+            format_func=lambda k: U.label_for(k), key="lab_basket",
+        )
+    with col4:
+        lab_n = st.slider("Tickers in basket", 5, 50, 15, 5, key="lab_n")
+
+    col5, col6, col7 = st.columns(3)
+    with col5:
+        lab_cash = st.number_input(
+            "Cash per ticker (€)", min_value=500,
+            value=int(bt_cfg.get("initial_cash", 10000)), step=500, key="lab_cash",
+        )
+    with col6:
+        lab_max_hold = st.slider("Max hold (bars)", 5, 250, 60, 5, key="lab_hold")
+    with col7:
+        st.metric("Estimated total capital",
+                   f"€{lab_cash * lab_n:,.0f}")
+
+    st.caption(
+        "ℹ️ First run downloads long-history data from yfinance — for 15 tickers × 10y "
+        "expect 1–2 minutes. Subsequent runs use the cache and complete in seconds."
+    )
+
+    if st.button("🚀 Run Strategy Lab", key="run_lab"):
+        basket_tickers = U.get_tickers(lab_universe_key)[:lab_n]
+        if not basket_tickers:
+            st.error("Empty basket — pick another asset class.")
+        else:
+            strat_cls = REGISTRY[lab_strat_name]
+            strat = strat_cls(strategy_cfg.get(lab_strat_name, {}))
+            lab = StrategyLab(
+                data_manager=get_data_manager(),
+                initial_cash_per_ticker=lab_cash,
+                risk_per_trade=risk_pct,
+                atr_stop_multiplier=atr_mult,
+                take_profit_r_multiple=tp_r,
+                commission_pct=bt_cfg.get("commission_pct", 0.0005),
+                slippage_pct=bt_cfg.get("slippage_pct", 0.0005),
+                max_hold_bars=lab_max_hold,
+            )
+
+            progress_bar = st.progress(0.0, text="Starting…")
+
+            def _progress(i: int, n: int, ticker: str) -> None:
+                pct = i / n if n else 1.0
+                progress_bar.progress(min(pct, 1.0),
+                                       text=f"{i}/{n} · {ticker}")
+
+            with st.spinner("Running portfolio backtest…"):
+                result = lab.run(strat, basket_tickers,
+                                  period=lab_period, progress=_progress)
+            progress_bar.empty()
+
+            stats = result.portfolio_stats
+            if not stats:
+                st.error("No backtest results — check tickers and period.")
+            else:
+                st.success(
+                    f"Backtested **{stats.get('tickers_run', 0)}** tickers over "
+                    f"**{stats.get('years', 0)}** years with **{stats.get('trades', 0)}** trades."
+                )
+
+                st.markdown("#### 💰 Portfolio performance")
+                m = st.columns(4)
+                m[0].metric("Total Return", f"{stats.get('total_return_pct', 0):.2f}%")
+                m[1].metric("CAGR",         f"{stats.get('cagr_pct', 0):.2f}%")
+                m[2].metric("Volatility",   f"{stats.get('volatility_pct', 0):.2f}%")
+                m[3].metric("Final Equity", f"€{stats.get('final_equity_total', 0):,.0f}")
+
+                st.markdown("#### 🧮 Risk-adjusted")
+                m = st.columns(4)
+                m[0].metric("Sharpe",   f"{stats.get('sharpe', 0):.2f}")
+                m[1].metric("Sortino",  f"{stats.get('sortino', 0):.2f}")
+                m[2].metric("Calmar",   f"{stats.get('calmar', 0):.2f}" if stats.get('calmar') else "—")
+                m[3].metric("Recovery", f"{stats.get('recovery_factor', 0):.2f}" if stats.get('recovery_factor') else "—")
+
+                st.markdown("#### 📉 Drawdown")
+                m = st.columns(2)
+                m[0].metric("Max Drawdown",         f"{stats.get('max_drawdown_pct', 0):.2f}%")
+                m[1].metric("Max DD duration (days)", stats.get('max_dd_duration_bars', 0))
+
+                st.markdown("#### 🎯 Trade quality")
+                m = st.columns(4)
+                m[0].metric("Win Rate",      f"{stats.get('win_rate_pct', 0):.1f}%")
+                m[1].metric("Profit Factor", f"{stats.get('profit_factor', 0):.2f}" if stats.get('profit_factor') else "—")
+                m[2].metric("Payoff Ratio",  f"{stats.get('payoff_ratio', 0):.2f}" if stats.get('payoff_ratio') else "—")
+                m[3].metric("Expectancy/trade", f"€{stats.get('expectancy_eur', 0):,.2f}")
+
+                m = st.columns(4)
+                m[0].metric("Avg Win",   f"€{stats.get('avg_win_eur', 0):,.2f}")
+                m[1].metric("Avg Loss",  f"€{stats.get('avg_loss_eur', 0):,.2f}")
+                m[2].metric("Largest Win",  f"€{stats.get('largest_win_eur', 0):,.2f}")
+                m[3].metric("Largest Loss", f"€{stats.get('largest_loss_eur', 0):,.2f}")
+
+                m = st.columns(3)
+                m[0].metric("Total Trades", stats.get("trades", 0))
+                m[1].metric("Avg R / trade", stats.get("avg_R", "—"))
+                m[2].metric("Avg hold (days)", stats.get("avg_hold_days", "—"))
+
+                st.markdown("#### 📈 Portfolio equity curve")
+                if not result.portfolio_equity.empty:
+                    eq = result.portfolio_equity
+                    chart_df = pd.DataFrame({
+                        "Portfolio": eq,
+                        "Drawdown %": (eq / eq.cummax() - 1) * 100,
+                    })
+                    st.line_chart(chart_df["Portfolio"], height=320)
+                    st.area_chart(chart_df["Drawdown %"], height=180,
+                                   color="#f85149")
+
+                st.markdown("#### 🔍 Per-ticker breakdown")
+                ticker_table = result.per_ticker_table
+                if not ticker_table.empty:
+                    cols_to_show = [
+                        "ticker", "trades", "win_rate_pct", "total_return_pct",
+                        "cagr_pct", "max_drawdown_pct", "sharpe", "sortino",
+                        "profit_factor", "avg_R", "expectancy_eur",
+                    ]
+                    cols_to_show = [c for c in cols_to_show if c in ticker_table.columns]
+                    st.dataframe(ticker_table[cols_to_show], use_container_width=True,
+                                  hide_index=True)
+
+                st.markdown("#### 🧾 Pooled trades (all tickers, chronological)")
+                if not result.pooled_trades.empty:
+                    st.dataframe(result.pooled_trades.tail(200),
+                                  use_container_width=True, hide_index=True)
+                    if st.button("📤 Export all trades to CSV", key="export_lab"):
+                        path = Reporter().save_trades(result.pooled_trades, fmt="csv")
+                        st.success(f"Saved {path}")
 
 # ── Notifications (manual trigger) ───────────────────────────────────────
 st.markdown("---")

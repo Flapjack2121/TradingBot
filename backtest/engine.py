@@ -162,23 +162,87 @@ class Backtester:
     def _summarize(eq: pd.Series, trades: pd.DataFrame) -> dict:
         if eq.empty:
             return {}
+
         ret = eq.pct_change().dropna()
+        ann = 252  # trading days/year for daily bars
+        total_return = float(eq.iloc[-1] / eq.iloc[0] - 1)
+
+        # Compound annual growth rate
+        days = max((eq.index[-1] - eq.index[0]).days, 1)
+        years = days / 365.25
+        cagr = (eq.iloc[-1] / eq.iloc[0]) ** (1 / years) - 1 if years > 0 and eq.iloc[0] > 0 else 0.0
+
+        # Sharpe / Sortino (rf = 0)
+        std = ret.std()
+        downside = ret[ret < 0].std()
+        sharpe = float(np.sqrt(ann) * ret.mean() / std) if std and std > 0 else 0.0
+        sortino = float(np.sqrt(ann) * ret.mean() / downside) if downside and downside > 0 else 0.0
+        volatility = float(std * np.sqrt(ann)) if std else 0.0
+
+        # Drawdown stats
         peak = eq.cummax()
-        dd = (eq / peak - 1)
-        sharpe = float(np.sqrt(252) * ret.mean() / ret.std()) if ret.std() else 0.0
+        dd = eq / peak - 1
         max_dd = float(dd.min()) if not dd.empty else 0.0
+
+        # Drawdown duration (longest stretch under water, in bars)
+        underwater = dd < 0
+        dd_dur, longest_dd = 0, 0
+        for u in underwater:
+            dd_dur = dd_dur + 1 if u else 0
+            longest_dd = max(longest_dd, dd_dur)
+
+        # Trade-level stats
+        n = len(trades)
         wins = trades[trades["pnl"] > 0] if not trades.empty else trades
         losses = trades[trades["pnl"] <= 0] if not trades.empty else trades
+        gross_win = float(wins["pnl"].sum()) if not wins.empty else 0.0
+        gross_loss = float(losses["pnl"].sum()) if not losses.empty else 0.0
+        profit_factor = (gross_win / abs(gross_loss)) if gross_loss < 0 else (float("inf") if gross_win > 0 else 0.0)
+
+        avg_win = float(wins["pnl"].mean()) if not wins.empty else 0.0
+        avg_loss = float(losses["pnl"].mean()) if not losses.empty else 0.0
+        payoff_ratio = (avg_win / abs(avg_loss)) if avg_loss < 0 else (float("inf") if avg_win > 0 else 0.0)
+
+        # Average bars held
+        if not trades.empty and "entry_time" in trades.columns and "exit_time" in trades.columns:
+            holds = (pd.to_datetime(trades["exit_time"]) - pd.to_datetime(trades["entry_time"])).dt.days
+            avg_hold_days = float(holds.mean())
+        else:
+            avg_hold_days = 0.0
+
+        calmar = (cagr / abs(max_dd)) if max_dd < 0 else (float("inf") if cagr > 0 else 0.0)
+        recovery = (total_return / abs(max_dd)) if max_dd < 0 else (float("inf") if total_return > 0 else 0.0)
+
         return {
-            "trades": int(len(trades)),
+            # Trade counts
+            "trades": int(n),
             "wins": int(len(wins)),
             "losses": int(len(losses)),
-            "win_rate_pct": round(len(wins) / len(trades) * 100, 2) if len(trades) else 0.0,
-            "total_return_pct": round(float(eq.iloc[-1] / eq.iloc[0] - 1) * 100, 2),
-            "max_drawdown_pct": round(max_dd * 100, 2),
+            "win_rate_pct": round(len(wins) / n * 100, 2) if n else 0.0,
+            # Return metrics
+            "total_return_pct": round(total_return * 100, 2),
+            "cagr_pct": round(cagr * 100, 2),
+            "volatility_pct": round(volatility * 100, 2),
+            # Risk-adjusted
             "sharpe": round(sharpe, 3),
+            "sortino": round(sortino, 3),
+            "calmar": round(calmar, 3) if np.isfinite(calmar) else None,
+            "recovery_factor": round(recovery, 3) if np.isfinite(recovery) else None,
+            # Drawdown
+            "max_drawdown_pct": round(max_dd * 100, 2),
+            "max_dd_duration_bars": int(longest_dd),
+            # Per-trade stats
             "avg_R": round(float(trades["r"].mean()), 3) if not trades.empty else None,
-            "expectancy": round(float(trades["pnl"].mean()), 2) if not trades.empty else None,
+            "expectancy_eur": round(float(trades["pnl"].mean()), 2) if not trades.empty else None,
+            "avg_win_eur": round(avg_win, 2),
+            "avg_loss_eur": round(avg_loss, 2),
+            "largest_win_eur": round(float(wins["pnl"].max()), 2) if not wins.empty else 0.0,
+            "largest_loss_eur": round(float(losses["pnl"].min()), 2) if not losses.empty else 0.0,
+            "profit_factor": round(profit_factor, 3) if np.isfinite(profit_factor) else None,
+            "payoff_ratio": round(payoff_ratio, 3) if np.isfinite(payoff_ratio) else None,
+            "avg_hold_days": round(avg_hold_days, 1),
+            # Period
+            "years": round(years, 2),
         }
 
     def run_many(self, frames: dict[str, pd.DataFrame], strategy: BaseStrategy) -> dict[str, BacktestResult]:

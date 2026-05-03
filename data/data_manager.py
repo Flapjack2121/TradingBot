@@ -53,21 +53,25 @@ class DataManager:
         return tickers
 
     # ── caching ───────────────────────────────────────────────────────────
-    def _cache_path(self, ticker: str) -> Path:
+    def _cache_path(self, ticker: str, period: str | None = None) -> Path:
         safe = ticker.replace("/", "_").replace("=", "_")
-        return self.cache_dir / f"{safe}.parquet"
+        scope = period or self.period
+        sub = self.cache_dir / scope
+        sub.mkdir(parents=True, exist_ok=True)
+        return sub / f"{safe}.parquet"
 
-    def _is_fresh(self, path: Path) -> bool:
+    def _is_fresh(self, path: Path, ttl_hours: float | None = None) -> bool:
         if not path.exists():
             return False
+        ttl = ttl_hours if ttl_hours is not None else self.cache_ttl_hours
         age_h = (dt.datetime.now().timestamp() - path.stat().st_mtime) / 3600
-        return age_h < self.cache_ttl_hours
+        return age_h < ttl
 
     # ── download ──────────────────────────────────────────────────────────
-    def _download(self, ticker: str) -> pd.DataFrame:
+    def _download(self, ticker: str, period: str | None = None) -> pd.DataFrame:
         df = yf.download(
             ticker,
-            period=self.period,
+            period=period or self.period,
             interval=self.interval,
             progress=False,
             auto_adjust=self.use_adjusted,
@@ -75,22 +79,28 @@ class DataManager:
         )
         if df is None or df.empty:
             return pd.DataFrame()
-        # flatten yfinance MultiIndex columns
         if isinstance(df.columns, pd.MultiIndex):
             df.columns = [c[0] for c in df.columns]
         df = df.dropna(how="all").copy()
         df.index = pd.to_datetime(df.index)
         return df
 
-    def get(self, ticker: str, force_refresh: bool = False) -> pd.DataFrame:
-        """Return raw OHLCV for one symbol, using cache when fresh."""
-        path = self._cache_path(ticker)
-        if not force_refresh and self._is_fresh(path):
+    def get(self, ticker: str, force_refresh: bool = False,
+            period: str | None = None, ttl_hours: float | None = None) -> pd.DataFrame:
+        """Return raw OHLCV for one symbol, using cache when fresh.
+
+        ``period`` overrides the default (e.g. ``"10y"`` for backtests). Each
+        period gets its own on-disk cache subdirectory so daily-scan data and
+        long-history backtest data don't overwrite each other.
+        ``ttl_hours`` lets long-history caches live longer than daily ones.
+        """
+        path = self._cache_path(ticker, period=period)
+        if not force_refresh and self._is_fresh(path, ttl_hours=ttl_hours):
             try:
                 return pd.read_parquet(path)
             except Exception as exc:
                 log.warning("Failed to read cache %s: %s", path, exc)
-        df = self._download(ticker)
+        df = self._download(ticker, period=period)
         if not df.empty:
             try:
                 df.to_parquet(path)
