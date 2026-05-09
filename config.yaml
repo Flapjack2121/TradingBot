@@ -80,7 +80,7 @@ modes:
 
   day:
     label: "⚡ Day Trading"
-    description: "Hourly bars · holds hours to ~2 days · faster indicators."
+    description: "Hourly bars · holds hours to ~2 days · faster, more selective triggers."
     interval: "1h"
     period: "730d"             # yfinance hard limit for hourly data
     max_hold_bars: 24          # ~1 trading day max
@@ -93,15 +93,15 @@ modes:
       macd: { fast: 12, slow: 26, signal: 9 }
     strategies:
       triple_confirmation:
-        rsi_threshold: 50
-        bb_touch_tolerance: 0.005      # tighter touch on hourly noise
+        rsi_threshold: 55              # was 50 in swing — only fire on stronger crosses
+        bb_touch_tolerance: 0.003      # tight: must virtually touch lower BB
       mean_reversion:
         rsi_period: 2
-        rsi_oversold: 5                # more selective on intraday
-        trend_filter_ema: 50           # faster trend filter (~2 trading days)
+        rsi_oversold: 5                # was 10 — only deeply oversold dips
+        trend_filter_ema: 50           # was 200 — faster trend filter (~2 trading days)
       breakout:
-        donchian_window: 20            # 20 hours = ~3 trading days
-        volume_multiplier: 2.0         # demand stronger volume confirmation
+        donchian_window: 12            # was 20 — react ~1.5 days faster
+        volume_multiplier: 2.0         # was 1.5 — demand stronger volume confirmation
 
 
 backtest:
