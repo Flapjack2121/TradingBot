@@ -88,11 +88,22 @@ def build_engine(account: float, risk_pct: float, atr_mult: float, tp_r: float,
 @st.cache_data(ttl=900, show_spinner=False)
 def scan_pipeline(universe_keys: tuple[str, ...], max_us: int, force: bool,
                   account: float, risk_pct: float, atr_mult: float, tp_r: float,
-                  enabled: tuple[str, ...]) -> dict:
-    """Full scan: fetch data per asset class, run all strategies, tag signals."""
+                  enabled: tuple[str, ...], mode_key: str) -> dict:
+    """Full scan: fetch data per asset class, run all strategies, tag signals.
+
+    The mode (``"swing"`` / ``"day"``) drives the bar interval, history depth,
+    indicator periods, and per-strategy parameters. Cache is keyed by mode so
+    swing and day scans don't trample each other.
+    """
     dm = get_data_manager()
     cfg = settings.load_config()
-    strat_params = cfg.get("strategies", {})
+    mode = cfg.get("modes", {}).get(mode_key, {})
+
+    interval = mode.get("interval", "1d")
+    period = mode.get("period", "2y")
+    indicator_cfg = mode.get("indicators", cfg.get("indicators", {}))
+    strat_params = mode.get("strategies", cfg.get("strategies", {}))
+
     engine = build_engine(account, risk_pct, atr_mult, tp_r, list(enabled), strat_params)
 
     selection = U.build_selection(list(universe_keys),
@@ -100,7 +111,10 @@ def scan_pipeline(universe_keys: tuple[str, ...], max_us: int, force: bool,
     ticker_class = U.ticker_to_asset_class(selection)
     all_tickers = sorted({t for ticks in selection.values() for t in ticks})
 
-    frames = dm.bulk(all_tickers, force_refresh=force)
+    frames = dm.bulk(
+        all_tickers, force_refresh=force,
+        period=period, interval=interval, indicator_cfg=indicator_cfg,
+    )
     signals = engine.scan(frames)
     SignalEngine.apply_asset_classes(signals, ticker_class)
 
@@ -109,6 +123,9 @@ def scan_pipeline(universe_keys: tuple[str, ...], max_us: int, force: bool,
     return {
         "frames": frames, "signals": signals, "regime": regime,
         "selection": selection, "ticker_class": ticker_class,
+        "mode": {"key": mode_key, "interval": interval, "period": period,
+                  "label": mode.get("label", mode_key.title()),
+                  "description": mode.get("description", "")},
     }
 
 
@@ -117,10 +134,26 @@ cfg = settings.load_config()
 risk_cfg = cfg.get("risk", {})
 strategy_cfg = cfg.get("strategies", {})
 
+modes_cfg = cfg.get("modes", {})
+mode_keys = list(modes_cfg.keys()) or ["swing"]
+mode_label_for = lambda k: modes_cfg.get(k, {}).get("label", k.title())
+
 with st.sidebar:
     st.markdown("## ⚙️ Settings")
     st.markdown("---")
 
+    st.markdown("### ⏱️ Trading Mode")
+    mode_key = st.radio(
+        "Timeframe", mode_keys,
+        format_func=mode_label_for,
+        index=0, key="trading_mode",
+        horizontal=True,
+    )
+    mode_desc = modes_cfg.get(mode_key, {}).get("description", "")
+    if mode_desc:
+        st.caption(mode_desc)
+
+    st.markdown("---")
     account_size = st.number_input(
         "Account Size (€)", min_value=100, max_value=10_000_000,
         value=int(risk_cfg.get("account_size", 10000)), step=500,
@@ -176,7 +209,6 @@ st.caption(
     f"Stop: **{atr_mult}× ATR**  •  TP: **{tp_r}R**  •  "
     "Human-in-the-loop — no automated execution."
 )
-st.markdown("---")
 
 if not selected_universes:
     st.warning("Pick at least one asset universe in the sidebar.")
@@ -185,10 +217,10 @@ if not enabled:
     st.warning("Select at least one strategy in the sidebar.")
     st.stop()
 
-with st.spinner("Scanning markets…"):
+with st.spinner(f"Scanning markets in {mode_label_for(mode_key)} mode…"):
     result = scan_pipeline(
         tuple(selected_universes), max_us, force,
-        account_size, risk_pct, atr_mult, tp_r, tuple(enabled),
+        account_size, risk_pct, atr_mult, tp_r, tuple(enabled), mode_key,
     )
 
 regime = result["regime"]
@@ -196,6 +228,28 @@ frames: dict[str, pd.DataFrame] = result["frames"]
 signals = result["signals"]
 ticker_class = result["ticker_class"]
 selection = result["selection"]
+mode_info = result["mode"]
+
+# From this point on, prefer the mode-specific strategy and indicator
+# parameters over the legacy top-level config blocks. This way the Backtest
+# and Strategy Lab tabs honour the same mode the user picked above.
+mode_block = modes_cfg.get(mode_info["key"], {})
+strategy_cfg = mode_block.get("strategies", strategy_cfg)
+indicator_cfg_active = mode_block.get("indicators", cfg.get("indicators", {}))
+
+mode_color = "#bc8cff" if mode_info["key"] == "day" else "#58a6ff"
+st.markdown(
+    f"<div style='border-left:4px solid {mode_color};padding:6px 14px;"
+    f"background:#161b22;border-radius:6px;margin-bottom:12px;'>"
+    f"<b style='color:{mode_color};'>{mode_info['label']}</b> · "
+    f"interval <code>{mode_info['interval']}</code> · "
+    f"history <code>{mode_info['period']}</code>"
+    + (f" · <span style='color:#8b949e;'>{mode_info['description']}</span>"
+       if mode_info.get('description') else "")
+    + "</div>",
+    unsafe_allow_html=True,
+)
+st.markdown("---")
 
 
 # ── Market regime banner ────────────────────────────────────────────────
@@ -428,7 +482,11 @@ with tabs[offset + 2]:
 
 # Backtest ----------------------------------------------------------------
 with tabs[offset + 3]:
-    st.markdown("### Single-symbol backtest")
+    st.markdown(f"### Single-symbol backtest · {mode_info['label']}")
+    st.caption(
+        f"Uses the active mode's bars ({mode_info['interval']}, {mode_info['period']}) "
+        "and strategy parameters."
+    )
     if not frames:
         st.info("No data loaded.")
     else:
@@ -454,6 +512,7 @@ with tabs[offset + 3]:
                     take_profit_r_multiple=tp_r,
                     commission_pct=bt_cfg.get("commission_pct", 0.0005),
                     slippage_pct=bt_cfg.get("slippage_pct", 0.0005),
+                    max_hold_bars=mode_block.get("max_hold_bars", 60),
                 )
                 bt_res = bt.run(bt_ticker, frames[bt_ticker], strat)
             st.json(bt_res.stats)
@@ -469,10 +528,16 @@ with tabs[offset + 4]:
 
     st.markdown("### 📚 Strategy Lab — multi-year, multi-ticker validation")
     st.caption(
-        "Run a strategy across a basket of tickers over 5–20 years and "
-        "see aggregated performance: win rate, CAGR, Sharpe, profit factor, "
-        "drawdown, and per-ticker breakdown."
+        "Run a strategy across a basket of tickers and see aggregated "
+        "performance: win rate, CAGR, Sharpe, profit factor, drawdown, and "
+        "per-ticker breakdown."
     )
+    if mode_info["key"] == "day":
+        st.warning(
+            "⚠️ Day mode active. yfinance only serves up to ~730 days of "
+            "hourly bars, so the lab caps the period accordingly. For "
+            "10+ year backtests switch to Swing mode."
+        )
 
     bt_cfg = cfg.get("backtest", {})
 
@@ -483,10 +548,17 @@ with tabs[offset + 4]:
             format_func=lambda n: STRATEGY_LABELS.get(n, n),
         )
     with col2:
-        lab_period = st.selectbox(
-            "History", ["5y", "10y", "15y", "20y", "max"],
-            index=1, key="lab_period",
-        )
+        if mode_info["key"] == "day":
+            # yfinance hard-caps hourly history at 730 days.
+            lab_period = st.selectbox(
+                "History", ["60d", "180d", "365d", "730d"],
+                index=2, key="lab_period",
+            )
+        else:
+            lab_period = st.selectbox(
+                "History", ["5y", "10y", "15y", "20y", "max"],
+                index=1, key="lab_period",
+            )
     with col3:
         lab_universe_key = st.selectbox(
             "Basket", list(U.UNIVERSES.keys()),
@@ -538,8 +610,13 @@ with tabs[offset + 4]:
                                        text=f"{i}/{n} · {ticker}")
 
             with st.spinner("Running portfolio backtest…"):
-                result = lab.run(strat, basket_tickers,
-                                  period=lab_period, progress=_progress)
+                result = lab.run(
+                    strat, basket_tickers,
+                    period=lab_period,
+                    interval=mode_info["interval"],
+                    indicator_cfg=indicator_cfg_active,
+                    progress=_progress,
+                )
             progress_bar.empty()
 
             stats = result.portfolio_stats

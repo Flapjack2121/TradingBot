@@ -47,6 +47,63 @@ strategies:
     donchian_window: 20
     volume_multiplier: 1.5
 
+# ── Trading mode profiles ────────────────────────────────────────────────
+# Each profile defines the timeframe, history depth, indicator periods, and
+# strategy parameters tuned for that horizon. The dashboard picks one mode
+# at scan time; cache directories are scoped per (interval, period) so the
+# two modes never overwrite each other.
+modes:
+  swing:
+    label: "📅 Swing Trading"
+    description: "Daily bars · holds days to weeks · long-term trend filters."
+    interval: "1d"
+    period: "2y"
+    max_hold_bars: 60          # ~12 weeks
+    indicators:
+      rsi: [2, 14]
+      ema: [9, 21, 50, 200]
+      bollinger: { window: 20, std: 2 }
+      atr: 14
+      volume_sma: 20
+      macd: { fast: 12, slow: 26, signal: 9 }
+    strategies:
+      triple_confirmation:
+        rsi_threshold: 50
+        bb_touch_tolerance: 0.01
+      mean_reversion:
+        rsi_period: 2
+        rsi_oversold: 10
+        trend_filter_ema: 200
+      breakout:
+        donchian_window: 20
+        volume_multiplier: 1.5
+
+  day:
+    label: "⚡ Day Trading"
+    description: "Hourly bars · holds hours to ~2 days · faster indicators."
+    interval: "1h"
+    period: "730d"             # yfinance hard limit for hourly data
+    max_hold_bars: 24          # ~1 trading day max
+    indicators:
+      rsi: [2, 14]
+      ema: [9, 21, 50, 200]    # in hours now (~8 trading days for EMA200)
+      bollinger: { window: 20, std: 2 }
+      atr: 14
+      volume_sma: 20
+      macd: { fast: 12, slow: 26, signal: 9 }
+    strategies:
+      triple_confirmation:
+        rsi_threshold: 50
+        bb_touch_tolerance: 0.005      # tighter touch on hourly noise
+      mean_reversion:
+        rsi_period: 2
+        rsi_oversold: 5                # more selective on intraday
+        trend_filter_ema: 50           # faster trend filter (~2 trading days)
+      breakout:
+        donchian_window: 20            # 20 hours = ~3 trading days
+        volume_multiplier: 2.0         # demand stronger volume confirmation
+
+
 backtest:
   initial_cash: 10000
   commission_pct: 0.0005   # 5 bps per side

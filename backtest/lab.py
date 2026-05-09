@@ -34,6 +34,7 @@ class LabResult:
     strategy_name: str
     period: str
     initial_cash_per_ticker: float
+    interval: str = "1d"
     per_ticker: dict[str, BacktestResult] = field(default_factory=dict)
     portfolio_equity: pd.Series = field(default_factory=lambda: pd.Series(dtype=float))
     portfolio_stats: dict = field(default_factory=dict)
@@ -64,7 +65,8 @@ class StrategyLab:
 
     # ── public ────────────────────────────────────────────────────────────
     def run(self, strategy: BaseStrategy, tickers: Iterable[str],
-            period: str = "10y", progress=None) -> LabResult:
+            period: str = "10y", interval: str = "1d",
+            indicator_cfg: dict | None = None, progress=None) -> LabResult:
         bt = Backtester(
             initial_cash=self.initial_cash_per_ticker,
             risk_per_trade=self.risk_per_trade,
@@ -74,6 +76,7 @@ class StrategyLab:
             slippage_pct=self.slippage_pct,
             max_hold_bars=self.max_hold_bars,
         )
+        ind_cfg = indicator_cfg or self.data_manager.indicator_cfg
 
         per_ticker: dict[str, BacktestResult] = {}
         tickers = list(tickers)
@@ -83,7 +86,7 @@ class StrategyLab:
                 progress(i, total, t)
             try:
                 df = self.data_manager.get(
-                    t, force_refresh=False, period=period,
+                    t, force_refresh=False, period=period, interval=interval,
                     ttl_hours=self.long_cache_ttl_hours,
                 )
             except Exception as exc:
@@ -92,7 +95,7 @@ class StrategyLab:
             if df is None or df.empty or len(df) < 250:
                 continue
             try:
-                df = compute_indicators(df, self.data_manager.indicator_cfg)
+                df = compute_indicators(df, ind_cfg)
                 per_ticker[t] = bt.run(t, df, strategy)
             except Exception as exc:
                 log.warning("Backtest failed for %s: %s", t, exc)
@@ -113,6 +116,7 @@ class StrategyLab:
         return LabResult(
             strategy_name=strategy.name,
             period=period,
+            interval=interval,
             initial_cash_per_ticker=self.initial_cash_per_ticker,
             per_ticker=per_ticker,
             portfolio_equity=portfolio_eq,

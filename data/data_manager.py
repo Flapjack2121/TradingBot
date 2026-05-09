@@ -53,9 +53,12 @@ class DataManager:
         return tickers
 
     # ── caching ───────────────────────────────────────────────────────────
-    def _cache_path(self, ticker: str, period: str | None = None) -> Path:
+    def _cache_path(self, ticker: str, period: str | None = None,
+                     interval: str | None = None) -> Path:
         safe = ticker.replace("/", "_").replace("=", "_")
-        scope = period or self.period
+        # Scope cache by interval AND period so swing (1d/2y) and day (1h/730d)
+        # bars never collide.
+        scope = f"{interval or self.interval}_{period or self.period}"
         sub = self.cache_dir / scope
         sub.mkdir(parents=True, exist_ok=True)
         return sub / f"{safe}.parquet"
@@ -68,11 +71,12 @@ class DataManager:
         return age_h < ttl
 
     # ── download ──────────────────────────────────────────────────────────
-    def _download(self, ticker: str, period: str | None = None) -> pd.DataFrame:
+    def _download(self, ticker: str, period: str | None = None,
+                   interval: str | None = None) -> pd.DataFrame:
         df = yf.download(
             ticker,
             period=period or self.period,
-            interval=self.interval,
+            interval=interval or self.interval,
             progress=False,
             auto_adjust=self.use_adjusted,
             threads=False,
@@ -86,21 +90,23 @@ class DataManager:
         return df
 
     def get(self, ticker: str, force_refresh: bool = False,
-            period: str | None = None, ttl_hours: float | None = None) -> pd.DataFrame:
+            period: str | None = None, interval: str | None = None,
+            ttl_hours: float | None = None) -> pd.DataFrame:
         """Return raw OHLCV for one symbol, using cache when fresh.
 
-        ``period`` overrides the default (e.g. ``"10y"`` for backtests). Each
-        period gets its own on-disk cache subdirectory so daily-scan data and
-        long-history backtest data don't overwrite each other.
-        ``ttl_hours`` lets long-history caches live longer than daily ones.
+        ``period`` and ``interval`` override the defaults (e.g. ``"10y"`` for
+        backtests, ``"1h"`` for day-trading). Each (interval, period) pair
+        gets its own on-disk cache subdirectory so different scan modes
+        don't overwrite each other. ``ttl_hours`` lets long-history caches
+        live longer than daily ones.
         """
-        path = self._cache_path(ticker, period=period)
+        path = self._cache_path(ticker, period=period, interval=interval)
         if not force_refresh and self._is_fresh(path, ttl_hours=ttl_hours):
             try:
                 return pd.read_parquet(path)
             except Exception as exc:
                 log.warning("Failed to read cache %s: %s", path, exc)
-        df = self._download(ticker, period=period)
+        df = self._download(ticker, period=period, interval=interval)
         if not df.empty:
             try:
                 df.to_parquet(path)
@@ -108,18 +114,29 @@ class DataManager:
                 log.warning("Failed to write cache %s: %s", path, exc)
         return df
 
-    def get_with_indicators(self, ticker: str, force_refresh: bool = False) -> pd.DataFrame:
-        df = self.get(ticker, force_refresh=force_refresh)
+    def get_with_indicators(self, ticker: str, force_refresh: bool = False,
+                              period: str | None = None,
+                              interval: str | None = None,
+                              indicator_cfg: dict | None = None) -> pd.DataFrame:
+        df = self.get(ticker, force_refresh=force_refresh,
+                       period=period, interval=interval)
         if df.empty:
             return df
-        return compute_indicators(df, self.indicator_cfg)
+        return compute_indicators(df, indicator_cfg or self.indicator_cfg)
 
-    def bulk(self, tickers: Iterable[str], force_refresh: bool = False) -> dict[str, pd.DataFrame]:
+    def bulk(self, tickers: Iterable[str], force_refresh: bool = False,
+              period: str | None = None, interval: str | None = None,
+              indicator_cfg: dict | None = None
+              ) -> dict[str, pd.DataFrame]:
         """Fetch (and cache) multiple tickers; returns ticker → indicator DataFrame."""
         out: dict[str, pd.DataFrame] = {}
         for t in tickers:
             try:
-                df = self.get_with_indicators(t, force_refresh=force_refresh)
+                df = self.get_with_indicators(
+                    t, force_refresh=force_refresh,
+                    period=period, interval=interval,
+                    indicator_cfg=indicator_cfg,
+                )
                 if not df.empty:
                     out[t] = df
             except Exception as exc:
@@ -128,7 +145,10 @@ class DataManager:
 
     # ── market regime ─────────────────────────────────────────────────────
     def market_regime(self, sma_window: int = 200, force_refresh: bool = False) -> dict:
-        df = self.get(self.benchmark, force_refresh=force_refresh)
+        # Regime is always taken from daily SPY — intraday noise is irrelevant
+        # for the bull/bear classification.
+        df = self.get(self.benchmark, force_refresh=force_refresh,
+                       period="2y", interval="1d")
         if df.empty or len(df) < sma_window:
             return {"regime": "unknown", "spy_close": None, "spy_sma": None}
         close = df["Close"].squeeze()

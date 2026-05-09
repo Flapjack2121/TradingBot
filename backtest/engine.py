@@ -232,8 +232,8 @@ class Backtester:
             "max_drawdown_pct": round(max_dd * 100, 2),
             "max_dd_duration_bars": int(longest_dd),
             # Per-trade stats
-            "avg_R": round(float(trades["r"].mean()), 3) if not trades.empty else None,
-            "expectancy_eur": round(float(trades["pnl"].mean()), 2) if not trades.empty else None,
+            "avg_R": round(float(trades["r"].mean()), 3) if not trades.empty else 0.0,
+            "expectancy_eur": round(float(trades["pnl"].mean()), 2) if not trades.empty else 0.0,
             "avg_win_eur": round(avg_win, 2),
             "avg_loss_eur": round(avg_loss, 2),
             "largest_win_eur": round(float(wins["pnl"].max()), 2) if not wins.empty else 0.0,
