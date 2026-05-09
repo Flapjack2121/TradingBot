@@ -31,7 +31,9 @@ class OpeningRangeBreakout(BaseStrategy):
     name = "orb"
     label = "🌅 Opening Range Breakout"
     description = "Crabel-style intraday breakout from the session's first bars."
+    source = "Crabel, Day Trading with Short Term Price Patterns (1990)"
     modes = ["day"]
+    asset_classes = ["all"]
 
     def generate(self, ticker: str, df: pd.DataFrame) -> Signal:
         if df is None or df.empty or len(df) < 30:

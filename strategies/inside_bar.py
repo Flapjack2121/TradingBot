@@ -34,7 +34,9 @@ class InsideBarBreakout(BaseStrategy):
         "Crabel-style compression breakout — long when current bar breaks "
         "above an inside bar (optionally also NR4)."
     )
+    source = "Crabel, Day Trading with Short Term Price Patterns (1990)"
     modes = ["day"]
+    asset_classes = ["all"]
 
     def generate(self, ticker: str, df: pd.DataFrame) -> Signal:
         if df is None or df.empty or len(df) < 6:

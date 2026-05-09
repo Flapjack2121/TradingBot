@@ -38,7 +38,7 @@ strategies:
   # Legacy global block — kept for back-compat with the scheduler. The
   # dashboard reads strategy params from the per-mode `modes.<mode>.strategies`
   # blocks below.
-  enabled: [minervini, mean_reversion, breakout]
+  enabled: [minervini, mean_reversion, breakout, bb_breakout]
 
 # ── Trading mode profiles ────────────────────────────────────────────────
 # Each profile defines the timeframe, history depth, indicator periods, and
@@ -60,7 +60,7 @@ modes:
       volume_sma: 20
       macd: { fast: 12, slow: 26, signal: 9 }
     strategies:
-      enabled: [minervini, mean_reversion, breakout]
+      enabled: [minervini, mean_reversion, breakout, bb_breakout]
       # 🏆 Minervini SEPA Trend Template (Trade Like a Stock Market Wizard)
       minervini:
         roc_period: 120                # bars for relative-strength proxy
@@ -78,6 +78,11 @@ modes:
       breakout:
         donchian_window: 20
         volume_multiplier: 1.5
+      # 💥 Bollinger Squeeze Breakout (Bollinger 2001) — universal
+      bb_breakout:
+        squeeze_lookback: 60           # bars for bandwidth median
+        squeeze_multiple: 0.85         # bandwidth must be ≤ 85% of median
+        trend_filter_ema: 200
 
   day:
     label: "⚡ Day Trading"
@@ -93,7 +98,7 @@ modes:
       volume_sma: 20
       macd: { fast: 12, slow: 26, signal: 9 }
     strategies:
-      enabled: [orb, vwap_reversion, inside_bar]
+      enabled: [orb, vwap_reversion, inside_bar, pivot_breakout]
       # 🌅 Toby Crabel — Opening Range Breakout
       orb:
         opening_bars: 1                # first hour defines the range
@@ -106,6 +111,9 @@ modes:
       # 🪤 Toby Crabel — Inside Bar / NR4 compression breakout
       inside_bar:
         require_nr4: true              # require narrowest range of last 4 bars
+      # 🧭 Floor-trader Pivot Point R1/S1 breakout (universal)
+      pivot_breakout:
+        volume_multiplier: 1.5
 
 
 backtest:

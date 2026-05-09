@@ -36,7 +36,11 @@ class TurtleSystem(BaseStrategy):
         "Richard Dennis Turtle System 1 — N-bar Donchian breakout with "
         "volume confirmation."
     )
+    source = "Dennis & Eckhardt (1983); Faith, Way of the Turtle (2007)"
     modes = ["swing"]
+    # The Turtle program was originally run on commodities and FX; later
+    # generalised across all liquid asset classes. Robustly published edge.
+    asset_classes = ["all"]
 
     def generate(self, ticker: str, df: pd.DataFrame) -> Signal:
         if df is None or df.empty or len(df) < 210:

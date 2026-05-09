@@ -68,20 +68,31 @@ class BaseStrategy(ABC):
 
     Class-level metadata
     --------------------
-    name        Stable id used in the registry, config, and DB rows.
-    label       Human-readable display label (with attribution).
-    description One-line summary of the system and its source.
-    modes       Which trading modes the strategy is appropriate for.
-                Use ``["swing"]``, ``["day"]``, or both.
+    name           Stable id used in the registry, config, and DB rows.
+    label          Human-readable display label (with attribution).
+    description    One-line summary of the system and its source.
+    source         Book / paper / author the system is documented in.
+    modes          Which trading modes the strategy is appropriate for.
+                   Use ``["swing"]``, ``["day"]``, or both.
+    asset_classes  Which asset classes the strategy is well-suited to.
+                   Use ``["all"]`` for universal systems, or a subset of
+                   ``{"Stocks US", "Stocks EU", "Stocks Asia",
+                       "Forex", "Commodity", "Crypto"}``.
     """
 
     name: str = "base"
     label: str = "Base Strategy"
     description: str = ""
+    source: str = ""
     modes: list[str] = ["swing"]
+    asset_classes: list[str] = ["all"]
 
     def __init__(self, params: dict | None = None) -> None:
         self.params = params or {}
+
+    @classmethod
+    def suits(cls, asset_class: str) -> bool:
+        return "all" in cls.asset_classes or asset_class in cls.asset_classes
 
     @abstractmethod
     def generate(self, ticker: str, df: pd.DataFrame) -> Signal:

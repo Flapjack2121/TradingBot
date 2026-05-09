@@ -27,7 +27,7 @@ from data import DataManager
 from data import universes as U
 from strategies import (
     REGISTRY, SignalEngine, STRATEGY_LABELS, SIDE_BUY, SIDE_WAIT, SIDE_AVOID,
-    registry_for_mode,
+    registry_for_mode, registry_for_asset_class,
 )
 from strategies.engine import RiskConfig
 from database import TradeRepo, TradeStatus
@@ -127,6 +127,15 @@ def scan_pipeline(universe_keys: tuple[str, ...], max_us: int, force: bool,
     signals = engine.scan(frames)
     SignalEngine.apply_asset_classes(signals, ticker_class)
 
+    # Drop signals where the strategy is not documented for that asset class.
+    # We keep AVOID-style "downtrend" verdicts even if the suitability chip
+    # says no — they're informational. Only filter actionable BUY/WAIT.
+    signals = [
+        s for s in signals
+        if REGISTRY.get(s.strategy) is None
+        or REGISTRY[s.strategy].suits(s.asset_class)
+    ]
+
     regime = dm.market_regime(sma_window=cfg.get("regime", {}).get("spy_sma", 200),
                                force_refresh=force)
     return {
@@ -201,6 +210,15 @@ st.caption(
     f"Risk/Trade: **{risk_pct*100:.2f}%**  •  "
     f"Stop: **{atr_mult}× ATR**  •  TP: **{tp_r}R**  •  "
     "Human-in-the-loop — no automated execution."
+)
+st.info(
+    "📚 All strategies in this dashboard are documented systems from published "
+    "trader/academic literature with historical edge — Minervini, Connors, "
+    "Dennis (Turtle), Bollinger, Crabel, and the institutional VWAP / floor-"
+    "trader Pivot tradition. **Past performance does not guarantee future "
+    "returns.** Use the **Strategy Lab** tab to validate on your basket and "
+    "horizon before committing capital.",
+    icon="ℹ️",
 )
 st.markdown("---")
 
@@ -344,21 +362,38 @@ def render_mode_view(mode_key: str) -> None:
     actionable = engine.actionable(signals)
     asset_classes = sorted(set(ticker_class.values())) or ["—"]
 
-    # Show the active per-strategy parameters and source attribution so the
-    # user sees exactly which named system is firing and how BUY logic differs.
-    with st.expander("🧠 Active strategies for this mode"):
+    # Per-strategy "info card": label, source, suitability chips, params.
+    with st.expander("🧠 Active strategies — sources, suitability & parameters"):
+        st.caption(
+            "ℹ️ All systems below are documented in published trader/academic "
+            "literature with historical edge. **No guarantee of future returns.** "
+            "Use the Strategy Lab tab to verify on the data you care about."
+        )
         for sname in enabled:
             cls = REGISTRY.get(sname)
             if cls is None:
                 continue
             params = mode_info["strategies"].get(sname, {}) or {}
-            st.markdown(f"**{cls.label}**")
+            classes_for_chip = cls.asset_classes
+            chip_html = " ".join(
+                f"<span style='background:#1a3a2a;color:#3fb950;"
+                f"padding:2px 8px;border-radius:10px;font-size:0.75rem;"
+                f"margin-right:4px;'>{ac}</span>"
+                for ac in classes_for_chip
+            )
+            st.markdown(
+                f"**{cls.label}** {chip_html}",
+                unsafe_allow_html=True,
+            )
             if cls.description:
                 st.caption(cls.description)
+            if cls.source:
+                st.caption(f"📚 *{cls.source}*")
             if params:
                 st.json(params)
             else:
                 st.caption("(defaults)")
+            st.markdown("---")
 
     # Sub-tabs ------------------------------------------------------------
     sub_names = (

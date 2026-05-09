@@ -30,7 +30,11 @@ class ConnorsRSI2(BaseStrategy):
     name = "mean_reversion"
     label = "🔄 Connors RSI-2"
     description = "Larry Connors RSI(2) deep-pullback mean reversion in uptrends."
+    source = "Connors & Alvarez, Short Term Trading Strategies That Work (2008)"
     modes = ["swing"]
+    # Connors's edge was documented on US equities and equity ETFs. Holds
+    # reasonably on EU/Asia stocks. Not validated for FX/commodities/crypto.
+    asset_classes = ["Stocks US", "Stocks EU", "Stocks Asia"]
 
     def generate(self, ticker: str, df: pd.DataFrame) -> Signal:
         if df is None or df.empty or len(df) < 210:

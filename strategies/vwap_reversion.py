@@ -36,7 +36,11 @@ class VWAPReversion(BaseStrategy):
     description = (
         "Fade extreme z-score deviations from session VWAP, trend-filtered."
     )
+    source = "Berkowitz, Logue & Noser (1988); institutional intraday standard"
     modes = ["day"]
+    # VWAP needs continuous, deep volume to be meaningful — works best on
+    # equities and major FX pairs. Crypto VWAP is usable but noisier.
+    asset_classes = ["Stocks US", "Stocks EU", "Stocks Asia", "Forex", "Crypto"]
 
     def generate(self, ticker: str, df: pd.DataFrame) -> Signal:
         if df is None or df.empty or len(df) < 30:

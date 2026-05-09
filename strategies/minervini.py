@@ -34,7 +34,10 @@ class MinerviniTrendTemplate(BaseStrategy):
     description = (
         "Mark Minervini's 8-criteria SEPA filter for Stage-2 momentum leaders."
     )
+    source = "Minervini, Trade Like a Stock Market Wizard (2013)"
     modes = ["swing"]
+    # Equity-momentum system; designed for and validated on individual stocks.
+    asset_classes = ["Stocks US", "Stocks EU", "Stocks Asia"]
 
     def generate(self, ticker: str, df: pd.DataFrame) -> Signal:
         if df is None or df.empty or len(df) < 230:

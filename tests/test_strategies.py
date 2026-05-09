@@ -94,6 +94,38 @@ def test_every_strategy_has_modes_and_label() -> None:
         assert isinstance(cls.description, str)
 
 
+def test_every_strategy_declares_asset_classes_and_source() -> None:
+    valid_classes = {
+        "all", "Stocks US", "Stocks EU", "Stocks Asia",
+        "Forex", "Commodity", "Crypto",
+    }
+    for name, cls in REGISTRY.items():
+        assert cls.asset_classes, f"{name} missing asset_classes"
+        for ac in cls.asset_classes:
+            assert ac in valid_classes, f"{name} has invalid asset_class {ac!r}"
+        assert cls.source, f"{name} missing source attribution"
+
+
+def test_suits_universal_and_specific() -> None:
+    from strategies import TurtleSystem, ConnorsRSI2
+    assert TurtleSystem.suits("Forex")          # universal
+    assert TurtleSystem.suits("Crypto")
+    assert ConnorsRSI2.suits("Stocks US")       # equity-only
+    assert not ConnorsRSI2.suits("Forex")
+    assert not ConnorsRSI2.suits("Crypto")
+
+
+def test_registry_for_asset_class_filters() -> None:
+    from strategies import registry_for_asset_class
+    forex_swing = registry_for_asset_class("Forex", mode_key="swing")
+    # Universal swing systems should pass
+    assert "breakout" in forex_swing       # Turtle
+    assert "bb_breakout" in forex_swing    # Bollinger
+    # Equity-only should be filtered out
+    assert "minervini" not in forex_swing
+    assert "mean_reversion" not in forex_swing
+
+
 def test_apply_asset_classes(ohlcv: pd.DataFrame) -> None:
     df = compute_indicators(ohlcv)
     engine = SignalEngine(strategies=[cls() for cls in REGISTRY.values()])
