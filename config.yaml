@@ -35,27 +35,20 @@ risk:
   max_open_positions: 10
 
 strategies:
-  enabled: [triple_confirmation, mean_reversion, breakout]
-  triple_confirmation:
-    rsi_threshold: 50
-    bb_touch_tolerance: 0.01
-  mean_reversion:
-    rsi_period: 2
-    rsi_oversold: 10
-    trend_filter_ema: 200
-  breakout:
-    donchian_window: 20
-    volume_multiplier: 1.5
+  # Legacy global block — kept for back-compat with the scheduler. The
+  # dashboard reads strategy params from the per-mode `modes.<mode>.strategies`
+  # blocks below.
+  enabled: [minervini, mean_reversion, breakout]
 
 # ── Trading mode profiles ────────────────────────────────────────────────
 # Each profile defines the timeframe, history depth, indicator periods, and
-# strategy parameters tuned for that horizon. The dashboard picks one mode
-# at scan time; cache directories are scoped per (interval, period) so the
-# two modes never overwrite each other.
+# the *named* strategies (with parameters tuned for that horizon). The
+# dashboard renders both modes side by side; cache directories are scoped
+# per (interval, period) so swing and day data never overwrite each other.
 modes:
   swing:
     label: "📅 Swing Trading"
-    description: "Daily bars · holds days to weeks · long-term trend filters."
+    description: "Daily bars · holds days to weeks · named systems from Minervini, Connors, Dennis."
     interval: "1d"
     period: "2y"
     max_hold_bars: 60          # ~12 weeks
@@ -67,20 +60,28 @@ modes:
       volume_sma: 20
       macd: { fast: 12, slow: 26, signal: 9 }
     strategies:
-      triple_confirmation:
-        rsi_threshold: 50
-        bb_touch_tolerance: 0.01
+      enabled: [minervini, mean_reversion, breakout]
+      # 🏆 Minervini SEPA Trend Template (Trade Like a Stock Market Wizard)
+      minervini:
+        roc_period: 120                # bars for relative-strength proxy
+        rs_threshold: 0.10             # RS proxy: 120-bar ROC ≥ 10%
+        min_pct_above_52w_low: 0.30    # at least 30% above 52-wk low
+        max_pct_below_52w_high: 0.25   # within 25% of 52-wk high
+        sma200_uptrend_bars: 22        # SMA200 must be rising for ~1 month
+      # 🔄 Larry Connors RSI-2 (Short Term Trading Strategies That Work)
       mean_reversion:
         rsi_period: 2
-        rsi_oversold: 10
+        rsi_oversold: 5                # canonical Connors threshold
         trend_filter_ema: 200
+        require_pullback: true         # require Close < SMA(5)
+      # 🐢 Turtle System 1 (Dennis / Eckhardt)
       breakout:
         donchian_window: 20
         volume_multiplier: 1.5
 
   day:
     label: "⚡ Day Trading"
-    description: "Hourly bars · holds hours to ~2 days · faster, more selective triggers."
+    description: "Hourly bars · holds hours to ~2 days · Crabel + VWAP intraday classics."
     interval: "1h"
     period: "730d"             # yfinance hard limit for hourly data
     max_hold_bars: 24          # ~1 trading day max
@@ -92,16 +93,19 @@ modes:
       volume_sma: 20
       macd: { fast: 12, slow: 26, signal: 9 }
     strategies:
-      triple_confirmation:
-        rsi_threshold: 55              # was 50 in swing — only fire on stronger crosses
-        bb_touch_tolerance: 0.003      # tight: must virtually touch lower BB
-      mean_reversion:
-        rsi_period: 2
-        rsi_oversold: 5                # was 10 — only deeply oversold dips
-        trend_filter_ema: 50           # was 200 — faster trend filter (~2 trading days)
-      breakout:
-        donchian_window: 12            # was 20 — react ~1.5 days faster
-        volume_multiplier: 2.0         # was 1.5 — demand stronger volume confirmation
+      enabled: [orb, vwap_reversion, inside_bar]
+      # 🌅 Toby Crabel — Opening Range Breakout
+      orb:
+        opening_bars: 1                # first hour defines the range
+        volume_multiplier: 1.5
+      # 📊 Session-anchored VWAP mean reversion (institutional standard)
+      vwap_reversion:
+        z_threshold: 1.5               # σ deviation from VWAP to trigger
+        trend_filter_ema: 50
+        min_bars_in_session: 3         # need a few bars before VWAP is meaningful
+      # 🪤 Toby Crabel — Inside Bar / NR4 compression breakout
+      inside_bar:
+        require_nr4: true              # require narrowest range of last 4 bars
 
 
 backtest:

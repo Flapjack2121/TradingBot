@@ -2,7 +2,7 @@ import pandas as pd
 import pytest
 
 from data.indicators import compute_indicators
-from strategies import REGISTRY, SignalEngine
+from strategies import REGISTRY, SignalEngine, registry_for_mode
 from strategies.engine import RiskConfig
 from strategies.base import BaseStrategy
 
@@ -70,10 +70,28 @@ def test_avoid_emitted_in_downtrend() -> None:
     bear = pd.DataFrame({"Open": open_, "High": high, "Low": low,
                          "Close": close, "Volume": volume}, index=idx)
     df = compute_indicators(bear)
-    for cls in (REGISTRY["triple_confirmation"], REGISTRY["mean_reversion"]):
-        sig = cls().generate("BEAR", df)
-        assert sig.side == "AVOID", f"{cls.__name__} should emit AVOID in pure downtrend"
-        assert "downtrend" in sig.rationale.lower() or "down" in sig.rationale.lower()
+    # Trend-filtered swing strategies must AVOID in a confirmed downtrend.
+    for name in ("minervini", "mean_reversion"):
+        sig = REGISTRY[name]().generate("BEAR", df)
+        assert sig.side == "AVOID", f"{name} should emit AVOID in pure downtrend"
+        assert any(k in sig.rationale.lower() for k in ("down", "stage-2", "downtrend")), \
+            f"{name} rationale must explain the AVOID"
+
+
+def test_registry_for_mode_partitions_strategies() -> None:
+    swing = registry_for_mode("swing")
+    day = registry_for_mode("day")
+    assert "minervini" in swing and "mean_reversion" in swing and "breakout" in swing
+    assert "orb" in day and "vwap_reversion" in day and "inside_bar" in day
+    # Mutually exclusive in this build
+    assert set(swing).isdisjoint(set(day))
+
+
+def test_every_strategy_has_modes_and_label() -> None:
+    for name, cls in REGISTRY.items():
+        assert cls.modes, f"{name} missing modes"
+        assert cls.label, f"{name} missing label"
+        assert isinstance(cls.description, str)
 
 
 def test_apply_asset_classes(ohlcv: pd.DataFrame) -> None:

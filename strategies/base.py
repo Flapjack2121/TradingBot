@@ -64,9 +64,21 @@ class Signal:
 
 
 class BaseStrategy(ABC):
-    """All strategies must implement :meth:`generate`."""
+    """All strategies must implement :meth:`generate`.
+
+    Class-level metadata
+    --------------------
+    name        Stable id used in the registry, config, and DB rows.
+    label       Human-readable display label (with attribution).
+    description One-line summary of the system and its source.
+    modes       Which trading modes the strategy is appropriate for.
+                Use ``["swing"]``, ``["day"]``, or both.
+    """
 
     name: str = "base"
+    label: str = "Base Strategy"
+    description: str = ""
+    modes: list[str] = ["swing"]
 
     def __init__(self, params: dict | None = None) -> None:
         self.params = params or {}

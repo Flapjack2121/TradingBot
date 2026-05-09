@@ -5,7 +5,10 @@ import pandas as pd
 from data.indicators import compute_indicators
 from data import DataManager
 from backtest import Backtester, StrategyLab
-from strategies import TripleConfirmation, MeanReversion, DonchianBreakout
+from strategies import (
+    MinerviniTrendTemplate, ConnorsRSI2, TurtleSystem,
+    MeanReversion, DonchianBreakout,
+)
 
 
 def test_backtest_runs(ohlcv) -> None:
@@ -23,7 +26,7 @@ def test_backtest_no_signals_breakeven(ohlcv) -> None:
     """A strategy that never fires should leave equity equal to initial cash."""
     df = compute_indicators(ohlcv)
 
-    class Never(TripleConfirmation):
+    class Never(MinerviniTrendTemplate):
         def generate(self, ticker, df):  # type: ignore[override]
             sig = super().generate(ticker, df)
             sig.side = "WAIT"

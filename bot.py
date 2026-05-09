@@ -25,7 +25,10 @@ if str(ROOT) not in sys.path:
 import settings
 from data import DataManager
 from data import universes as U
-from strategies import REGISTRY, SignalEngine, STRATEGY_LABELS, SIDE_BUY, SIDE_WAIT, SIDE_AVOID
+from strategies import (
+    REGISTRY, SignalEngine, STRATEGY_LABELS, SIDE_BUY, SIDE_WAIT, SIDE_AVOID,
+    registry_for_mode,
+)
 from strategies.engine import RiskConfig
 from database import TradeRepo, TradeStatus
 from reports import Reporter
@@ -93,12 +96,12 @@ def build_engine(account: float, risk_pct: float, atr_mult: float, tp_r: float,
 @st.cache_data(ttl=900, show_spinner=False)
 def scan_pipeline(universe_keys: tuple[str, ...], max_us: int, force: bool,
                   account: float, risk_pct: float, atr_mult: float, tp_r: float,
-                  enabled: tuple[str, ...], mode_key: str) -> dict:
+                  mode_key: str) -> dict:
     """Full scan: fetch data per asset class, run all strategies, tag signals.
 
     The mode (``"swing"`` / ``"day"``) drives the bar interval, history depth,
-    indicator periods, and per-strategy parameters. Cache is keyed by mode so
-    swing and day scans don't trample each other.
+    indicator periods, and the named strategies & parameters. Cache is keyed
+    by mode so swing and day scans don't trample each other.
     """
     dm = get_data_manager()
     cfg = settings.load_config()
@@ -107,9 +110,10 @@ def scan_pipeline(universe_keys: tuple[str, ...], max_us: int, force: bool,
     interval = mode.get("interval", "1d")
     period = mode.get("period", "2y")
     indicator_cfg = mode.get("indicators", cfg.get("indicators", {}))
-    strat_params = mode.get("strategies", cfg.get("strategies", {}))
+    strat_params = mode.get("strategies", {})
+    enabled = list(strat_params.get("enabled", list(registry_for_mode(mode_key).keys())))
 
-    engine = build_engine(account, risk_pct, atr_mult, tp_r, list(enabled), strat_params)
+    engine = build_engine(account, risk_pct, atr_mult, tp_r, enabled, strat_params)
 
     selection = U.build_selection(list(universe_keys),
                                    max_per_universe={"us_stocks": max_us})
@@ -133,6 +137,7 @@ def scan_pipeline(universe_keys: tuple[str, ...], max_us: int, force: bool,
                   "description": mode.get("description", ""),
                   "max_hold_bars": mode.get("max_hold_bars", 60),
                   "strategies": strat_params,
+                  "enabled": enabled,
                   "indicators": indicator_cfg},
     }
 
@@ -179,16 +184,10 @@ with st.sidebar:
     max_us = st.slider("Max US stocks (S&P 500)", 10, 503, 50, 10)
 
     st.markdown("---")
-    st.markdown("### 🧠 Strategies")
-    enabled_default = strategy_cfg_global.get("enabled", list(REGISTRY.keys()))
-    enabled = []
-    for name in REGISTRY.keys():
-        if st.checkbox(STRATEGY_LABELS.get(name, name),
-                        value=name in enabled_default,
-                        key=f"strat_{name}"):
-            enabled.append(name)
-
-    st.markdown("---")
+    st.caption(
+        "🧠 **Strategies** are mode-specific and configured in `config.yaml` "
+        "(`modes.<mode>.strategies.enabled`)."
+    )
     force = st.checkbox("Force refresh data", value=False)
     if st.button("🔄 Re-scan now"):
         st.cache_data.clear()
@@ -207,9 +206,6 @@ st.markdown("---")
 
 if not selected_universes:
     st.warning("Pick at least one asset universe in the sidebar.")
-    st.stop()
-if not enabled:
-    st.warning("Select at least one strategy in the sidebar.")
     st.stop()
 
 
@@ -306,7 +302,7 @@ def render_mode_view(mode_key: str) -> None:
     with st.spinner(f"Scanning markets in {modes_cfg.get(mode_key, {}).get('label', mode_key)} mode…"):
         result = scan_pipeline(
             tuple(selected_universes), max_us, force,
-            account_size, risk_pct, atr_mult, tp_r, tuple(enabled), mode_key,
+            account_size, risk_pct, atr_mult, tp_r, mode_key,
         )
 
     regime = result["regime"]
@@ -341,17 +337,24 @@ def render_mode_view(mode_key: str) -> None:
     )
 
     # Build per-mode engine for risk fill / actionable filtering
+    enabled = mode_info["enabled"]
     engine = build_engine(account_size, risk_pct, atr_mult, tp_r,
                            enabled, mode_info["strategies"])
     df_all = engine.to_dataframe(signals)
     actionable = engine.actionable(signals)
     asset_classes = sorted(set(ticker_class.values())) or ["—"]
 
-    # Show the active per-strategy parameters so the user sees how BUY logic differs.
-    with st.expander("🧠 Active strategy parameters for this mode"):
+    # Show the active per-strategy parameters and source attribution so the
+    # user sees exactly which named system is firing and how BUY logic differs.
+    with st.expander("🧠 Active strategies for this mode"):
         for sname in enabled:
-            params = mode_info["strategies"].get(sname, {})
-            st.markdown(f"**{STRATEGY_LABELS.get(sname, sname)}**")
+            cls = REGISTRY.get(sname)
+            if cls is None:
+                continue
+            params = mode_info["strategies"].get(sname, {}) or {}
+            st.markdown(f"**{cls.label}**")
+            if cls.description:
+                st.caption(cls.description)
             if params:
                 st.json(params)
             else:
@@ -517,10 +520,11 @@ def render_mode_view(mode_key: str) -> None:
                 "10+ year backtests use the Swing tab."
             )
 
+        mode_strat_keys = list(registry_for_mode(mode_key).keys()) or enabled
         col1, col2, col3, col4 = st.columns(4)
         with col1:
             lab_strat_name = st.selectbox(
-                "Strategy", list(REGISTRY.keys()),
+                "Strategy", mode_strat_keys,
                 key=f"lab_strat_{mode_key}",
                 format_func=lambda n: STRATEGY_LABELS.get(n, n),
             )

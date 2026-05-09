@@ -104,5 +104,9 @@ def compute_indicators(df: pd.DataFrame, cfg: dict | None = None) -> pd.DataFram
 
     out = out.join(donchian(high, low, 20))
 
-    out["sma200"] = close.rolling(200).mean()
+    # Simple moving averages — needed by named systems (Minervini SEPA needs
+    # SMA50/150/200; Connors uses SMA5 as exit signal).
+    for w in (5, 50, 150, 200):
+        out[f"sma_{w}"] = close.rolling(w).mean()
+    out["sma200"] = out["sma_200"]
     return out

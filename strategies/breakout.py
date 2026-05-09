@@ -1,17 +1,26 @@
-"""Donchian-style breakout strategy with volume confirmation.
+"""Turtle Trading System 1 — swing breakout.
 
-Goes long when:
+Source: Richard Dennis & William Eckhardt, the Turtle Trading System (1983).
+Documented by Curtis Faith in *Way of the Turtle* (2007).
 
-1. Today's close exceeds the ``donchian_window``-day high (i.e. an N-day high
-   breakout — Donchian channel upper-band breach).
-2. Today's volume is at least ``volume_multiplier`` × the volume SMA. This
-   filters out low-conviction breakouts.
-3. Optional regime filter: long-term trend up (close > EMA200).
+The original Turtle System 1 (S1) rules adapted for long-only equities:
+
+  1.  Entry: today's close breaks above the prior ``donchian_window``-bar high
+      (default 20). Optional volume confirmation requires today's volume to
+      exceed ``volume_multiplier`` × volume SMA — Dennis didn't require this
+      but it filters fake breakouts on equities.
+  2.  Optional regime filter: only take longs when the symbol's long-term
+      trend is up (close > EMA200) — keeps the system out of failed
+      breakouts in confirmed downtrends.
+  3.  Stop loss: 2N below entry, where N = ATR(14). Position sizing in the
+      original system is 1 % equity ÷ N; we use the engine's ATR-multiple
+      stop with the user-configured risk %.
 
 Verdicts:
-- **BUY**   bullish breakout + volume + uptrend,
-- **AVOID** active breakdown (close < N-day low), regardless of volume,
-- **WAIT**  in range — no breakout, no breakdown.
+- **BUY**   N-bar high breakout with volume + uptrend.
+- **AVOID** active N-bar low breakdown — opposite of breakout, exit / no
+            new longs.
+- **WAIT**  inside the prior range — no signal.
 """
 from __future__ import annotations
 
@@ -20,8 +29,14 @@ import pandas as pd
 from .base import BaseStrategy, Signal, SIDE_AVOID, SIDE_BUY, SIDE_WAIT
 
 
-class DonchianBreakout(BaseStrategy):
+class TurtleSystem(BaseStrategy):
     name = "breakout"
+    label = "🐢 Turtle Donchian (S1)"
+    description = (
+        "Richard Dennis Turtle System 1 — N-bar Donchian breakout with "
+        "volume confirmation."
+    )
+    modes = ["swing"]
 
     def generate(self, ticker: str, df: pd.DataFrame) -> Signal:
         if df is None or df.empty or len(df) < 210:
@@ -30,8 +45,8 @@ class DonchianBreakout(BaseStrategy):
         window = self.params.get("donchian_window", 20)
         vol_mult = self.params.get("volume_multiplier", 1.5)
 
-        # Use the donchian high *excluding today* — otherwise today's bar
-        # contains itself and the breakout is trivially true.
+        # Donchian channel computed *excluding* today's bar — otherwise the
+        # current bar contains itself and the breakout is trivially true.
         prior_high = df["High"].rolling(window).max().shift(1).iloc[-1]
         prior_low = df["Low"].rolling(window).min().shift(1).iloc[-1]
         last = df.iloc[-1]
@@ -59,25 +74,33 @@ class DonchianBreakout(BaseStrategy):
         if cond_breakout and cond_volume and cond_trend:
             side = SIDE_BUY
             rationale = (
-                f"Bullish breakout: close {price:.2f} above {window}-day high "
-                f"{prior_high:.2f}, volume {vol_ratio:.1f}× average, in uptrend."
+                f"Turtle S1 breakout: close {price:.2f} above {window}-bar "
+                f"high {prior_high:.2f}, volume {vol_ratio:.1f}× SMA, in "
+                "uptrend. Stop = 2N (2× ATR) below entry per Turtle rules."
             )
         elif cond_breakdown:
             side = SIDE_AVOID
             rationale = (
-                f"Bearish breakdown: close {price:.2f} below {window}-day low "
-                f"{prior_low:.2f}. Avoid longs — momentum is downward."
+                f"Turtle short signal — close {price:.2f} below {window}-bar "
+                f"low {prior_low:.2f}. Long-only system stays out; existing "
+                "longs would have stopped out."
             )
         else:
-            side = SIDE_WAIT
             missing = []
             if not cond_breakout:
-                missing.append(f"price still inside {window}-day range (< {prior_high:.2f})")
+                missing.append(f"price still inside {window}-bar range (< {prior_high:.2f})")
             if cond_breakout and not cond_volume:
-                missing.append(f"breakout lacks volume confirmation ({vol_ratio:.1f}×, need ≥ {vol_mult}×)")
+                missing.append(
+                    f"breakout lacks volume ({vol_ratio:.1f}×, need ≥ {vol_mult}×)"
+                )
             if cond_breakout and not cond_trend:
                 missing.append("trend filter not bullish (close < EMA200)")
-            rationale = "Range-bound — " + ("; ".join(missing) or "waiting for a clean breakout") + "."
+            side = SIDE_WAIT
+            rationale = (
+                "No breakout — "
+                + ("; ".join(missing) or "waiting for a clean N-bar high break")
+                + "."
+            )
 
         return Signal(
             ticker=ticker,
@@ -87,7 +110,7 @@ class DonchianBreakout(BaseStrategy):
             atr=atr_val,
             confidence=confidence,
             reasons={
-                f"close > {window}-day high": cond_breakout,
+                f"close > {window}-bar high": cond_breakout,
                 f"volume ≥ {vol_mult}× SMA": cond_volume,
                 "trend (close > EMA200)": cond_trend,
             },
@@ -101,3 +124,7 @@ class DonchianBreakout(BaseStrategy):
             },
             as_of=df.index[-1],
         )
+
+
+# Back-compat alias
+DonchianBreakout = TurtleSystem
