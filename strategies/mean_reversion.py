@@ -36,6 +36,34 @@ class ConnorsRSI2(BaseStrategy):
     # reasonably on EU/Asia stocks. Not validated for FX/commodities/crypto.
     asset_classes = ["Stocks US", "Stocks EU", "Stocks Asia"]
 
+    typical_hold = "1–5 trading days (rarely more)"
+    typical_hold_bars = (1, 5)
+    exit_rules = [
+        "Close > SMA(5) — Connors's canonical exit. Take profit.",
+        "RSI(2) > 70 — short-term overbought; sell into strength.",
+        "5 bars elapsed without RSI(2) > 70 — time stop, exit at close.",
+        "Stop loss if close < entry − 2× ATR (engine-managed).",
+    ]
+    watch_for = [
+        "SPY itself > SMA200 — Connors's research is conditional on a "
+        "healthy market regime. If SPY rolls over, skip new RSI-2 longs.",
+        "Avoid holding through earnings — earnings gaps blow out the small "
+        "edge of this strategy. Check the symbol's report date.",
+        "Gap-down opens that put you near the stop immediately — "
+        "consider letting the day develop before adding size.",
+        "Sector context — if the whole sector is selling off, the "
+        "mean-reversion edge weakens; wait for sector to stabilise.",
+    ]
+    why_it_works = (
+        "In confirmed uptrends, short-term sell-offs are usually noise — "
+        "panic selling, margin calls, profit-taking. Connors's backtests "
+        "over 1996–2008 US equities show that buying ETFs/large-caps after "
+        "RSI(2) closes < 5 (top 1 % of oversold readings) produces a "
+        "positive expectancy because mean reversion to the short-term "
+        "average happens within days roughly 75 % of the time. The trend "
+        "filter ensures you're only fading dips, never tops."
+    )
+
     def generate(self, ticker: str, df: pd.DataFrame) -> Signal:
         if df is None or df.empty or len(df) < 210:
             return self._empty(ticker, self.name)

@@ -35,6 +35,38 @@ class OpeningRangeBreakout(BaseStrategy):
     modes = ["day"]
     asset_classes = ["all"]
 
+    typical_hold = "Intraday — hours, never overnight (1–6 hourly bars)"
+    typical_hold_bars = (1, 6)
+    exit_rules = [
+        "Close all positions before session close — never hold overnight.",
+        "Price falls back inside the opening range — failed breakout, "
+        "exit immediately.",
+        "Take-profit at 2R or at a major intraday level (prior-day high, "
+        "round number, R2 pivot).",
+        "Volume dies in the breakout direction — exit before reversal.",
+    ]
+    watch_for = [
+        "News at the open — earnings, macro releases, central bank "
+        "speeches. A catalyst-driven ORB is much higher quality than a "
+        "drift-driven one.",
+        "Index futures direction — if SPY/QQQ/ES futures are sloping the "
+        "same way, the breakout is supported.",
+        "Volume profile of the first hour — a wide range on heavy volume "
+        "is a meaningful opening range; thin volume = flip a coin.",
+        "Major economic releases scheduled later in the session — could "
+        "abruptly reverse the move.",
+    ]
+    why_it_works = (
+        "The first 30–60 minutes of a trading session establish the day's "
+        "value area as institutional orders fill in. When price breaks "
+        "that range with volume, one side (buyers or sellers) has fully "
+        "overpowered the other within the auction process. Crabel's tests "
+        "on commodity and equity index futures (1970s–1990s) showed that "
+        "directional breakouts of well-formed opening ranges tend to "
+        "extend for the rest of the session about 60–65 % of the time. "
+        "Risk is naturally defined by the opposite end of the range."
+    )
+
     def generate(self, ticker: str, df: pd.DataFrame) -> Signal:
         if df is None or df.empty or len(df) < 30:
             return self._empty(ticker, self.name)

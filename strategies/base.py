@@ -68,16 +68,25 @@ class BaseStrategy(ABC):
 
     Class-level metadata
     --------------------
-    name           Stable id used in the registry, config, and DB rows.
-    label          Human-readable display label (with attribution).
-    description    One-line summary of the system and its source.
-    source         Book / paper / author the system is documented in.
-    modes          Which trading modes the strategy is appropriate for.
-                   Use ``["swing"]``, ``["day"]``, or both.
-    asset_classes  Which asset classes the strategy is well-suited to.
-                   Use ``["all"]`` for universal systems, or a subset of
-                   ``{"Stocks US", "Stocks EU", "Stocks Asia",
-                       "Forex", "Commodity", "Crypto"}``.
+    name              Stable id used in the registry, config, and DB rows.
+    label             Human-readable display label (with attribution).
+    description       One-line summary of the system and its source.
+    source            Book / paper / author the system is documented in.
+    modes             Trading horizons (``["swing"]``, ``["day"]``, or both).
+    asset_classes     Where the literature documents an edge (``["all"]``
+                      for universal systems, or specific ones).
+
+    Playbook (informational — shown in the dashboard so the trader knows
+    *what to do after entering*):
+
+    typical_hold      Human-readable expected holding period.
+    typical_hold_bars (min, max) bars — drives the backtester's max-hold cap.
+    exit_rules        Concrete rules for closing the position beyond the
+                      mechanical Stop / Take Profit. List of strings.
+    watch_for         Things to monitor / catalysts that could
+                      invalidate the trade. List of strings.
+    why_it_works      Short educational paragraph explaining the system's
+                      mechanism — why this edge exists at all.
     """
 
     name: str = "base"
@@ -86,6 +95,13 @@ class BaseStrategy(ABC):
     source: str = ""
     modes: list[str] = ["swing"]
     asset_classes: list[str] = ["all"]
+
+    # Playbook defaults
+    typical_hold: str = "—"
+    typical_hold_bars: tuple[int, int] = (1, 60)
+    exit_rules: list[str] = []
+    watch_for: list[str] = []
+    why_it_works: str = ""
 
     def __init__(self, params: dict | None = None) -> None:
         self.params = params or {}

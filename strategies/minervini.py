@@ -39,6 +39,38 @@ class MinerviniTrendTemplate(BaseStrategy):
     # Equity-momentum system; designed for and validated on individual stocks.
     asset_classes = ["Stocks US", "Stocks EU", "Stocks Asia"]
 
+    typical_hold = "Weeks to months (10–60 trading days)"
+    typical_hold_bars = (10, 60)
+    exit_rules = [
+        "Close < SMA50 on a daily close — Stage-2 trend is broken.",
+        "SMA50 rolls under SMA150 — momentum lost; exit even at small loss.",
+        "Price closes below SMA200 — symbol enters Stage-4 decline.",
+        "Take-profit at 2R (or trail with a 20-day Chandelier stop after +1R).",
+        "Volume climax: a parabolic up-day on 2× average volume followed by "
+        "a lower close — Minervini calls this 'climactic action', sell into it.",
+    ]
+    watch_for = [
+        "Earnings releases — Minervini's strongest setups follow earnings "
+        "breakouts. Either hold through and accept gap risk, or exit one "
+        "day before reporting.",
+        "Industry-group strength — if the sector ETF rolls over, the trade "
+        "loses its tailwind.",
+        "S&P 500 distribution days (high-volume down days). Several in a "
+        "short window = market weakness; tighten stops on all positions.",
+        "Pivot points / volume pockets where shares were heavily traded — "
+        "expect resistance at these levels.",
+    ]
+    why_it_works = (
+        "Minervini's research on the best-performing US stocks of the "
+        "1990s–2010s shows that the very largest winners share the same "
+        "structural pattern before they advance: price above rising "
+        "SMA50/150/200 in a strict hierarchy, sitting near 52-wk highs, "
+        "with positive relative strength versus the market. The 8-criteria "
+        "filter codifies that pattern. Catching only Stage-2 names cuts the "
+        "universe to a few % of stocks but disproportionately captures the "
+        "ones capable of 50–500 % moves."
+    )
+
     def generate(self, ticker: str, df: pd.DataFrame) -> Signal:
         if df is None or df.empty or len(df) < 230:
             return self._empty(ticker, self.name)

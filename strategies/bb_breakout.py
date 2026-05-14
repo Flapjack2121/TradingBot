@@ -38,6 +38,37 @@ class BollingerBandBreakout(BaseStrategy):
     modes = ["swing"]
     asset_classes = ["all"]
 
+    typical_hold = "Days to ~3 weeks (5–20 bars)"
+    typical_hold_bars = (5, 20)
+    exit_rules = [
+        "Close back inside the upper band on a daily close — failed "
+        "breakout, exit at next open.",
+        "Price tags the lower Bollinger Band — full mean reversion, take "
+        "profits.",
+        "Bandwidth re-contracts to a new squeeze — momentum exhausted; "
+        "exit and watch for the next setup.",
+        "Standard 2R take-profit at +2× initial risk.",
+    ]
+    watch_for = [
+        "Volume on breakout bar — Bollinger himself emphasises volume "
+        "confirmation. Low-volume band breaks fail more often.",
+        "M-tops: a second band-tag that fails to make a new high → "
+        "reversal warning. W-bottoms mirror it on the downside.",
+        "Higher timeframe trend — a daily band break against a weekly "
+        "downtrend is unreliable. Check weekly chart.",
+        "Catalysts: earnings, central bank meetings, OPEC, FOMC — "
+        "squeezes often resolve into the news event.",
+    ]
+    why_it_works = (
+        "Markets oscillate between low-volatility (compression) and "
+        "high-volatility (expansion) regimes. Bollinger's research, plus "
+        "decades of practitioner replication, shows that bandwidth has "
+        "predictive power: extended periods of contraction "
+        "disproportionately precede expansion events. Trading the "
+        "*direction* of the expansion (filtered by trend) catches the "
+        "moves where volatility is being re-priced higher."
+    )
+
     def generate(self, ticker: str, df: pd.DataFrame) -> Signal:
         if df is None or df.empty or len(df) < 210:
             return self._empty(ticker, self.name)

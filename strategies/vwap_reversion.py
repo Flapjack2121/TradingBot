@@ -42,6 +42,37 @@ class VWAPReversion(BaseStrategy):
     # equities and major FX pairs. Crypto VWAP is usable but noisier.
     asset_classes = ["Stocks US", "Stocks EU", "Stocks Asia", "Forex", "Crypto"]
 
+    typical_hold = "Hours, intraday only (1–4 hourly bars)"
+    typical_hold_bars = (1, 4)
+    exit_rules = [
+        "Price returns to VWAP — the primary target. Take profit there.",
+        "End of session — never hold overnight.",
+        "VWAP slope flips direction — the institutional bias has changed; exit.",
+        "Stop loss at the session low (for longs) or 2× ATR(1h) below entry.",
+    ]
+    watch_for = [
+        "VWAP slope — rising VWAP = positive intraday drift, makes longs "
+        "stronger. Flat or falling VWAP = mean-reversion edge weakens.",
+        "Volume at the extreme deviation — capitulation-style volume "
+        "(spike on the dip) is a much higher-quality entry than thin "
+        "volume drift.",
+        "Distance from session high / low — VWAP fades work best in the "
+        "middle of the session range, not at the edges.",
+        "Order-flow / tape (if you have access) — large sweeping prints "
+        "against the direction warn you off the reversion trade.",
+    ]
+    why_it_works = (
+        "VWAP is the *institutional* benchmark — pension funds, mutual "
+        "funds, market-makers and execution algorithms all target it for "
+        "their fills. When price deviates several σ from VWAP intraday, "
+        "the imbalance is usually caused by short-term liquidity events "
+        "(stop runs, retail panic, news flashes). Institutional reserve "
+        "orders sitting at VWAP get filled against the extreme, dragging "
+        "price back. The trend filter ensures you're only fading in the "
+        "direction of the day's drift — fading against the drift loses "
+        "to the trend most of the time."
+    )
+
     def generate(self, ticker: str, df: pd.DataFrame) -> Signal:
         if df is None or df.empty or len(df) < 30:
             return self._empty(ticker, self.name)

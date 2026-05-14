@@ -38,6 +38,36 @@ class PivotPointBreakout(BaseStrategy):
     modes = ["day"]
     asset_classes = ["all"]
 
+    typical_hold = "Same day, intraday only (1–6 hourly bars)"
+    typical_hold_bars = (1, 6)
+    exit_rules = [
+        "Take-profit at R2 (next pivot level above R1) — natural target.",
+        "Exit if price falls back below the central pivot (P) — breakout "
+        "has failed; sellers regained control.",
+        "Close all positions before session close.",
+        "Tighten stop to entry once R2 is reached and let it run.",
+    ]
+    watch_for = [
+        "Round numbers near pivot levels — psychological levels amplify "
+        "self-fulfilling reactions.",
+        "Where index futures are vs. their *own* pivots — correlated "
+        "moves are higher quality.",
+        "Scheduled news within the session — release times can void the "
+        "pivot logic entirely.",
+        "Volume on the R1 break — institutional algorithms trigger on "
+        "level breaks; thin volume = mostly retail = unreliable.",
+    ]
+    why_it_works = (
+        "Pivot points are computed identically by virtually every "
+        "professional desk, retail platform, and intraday algorithm in "
+        "the world. That universality turns them into self-fulfilling "
+        "support/resistance levels — automated stop orders cluster "
+        "around them, and trapped traders react predictably when they "
+        "break. The R1 → R2 leg has been documented as one of the most "
+        "consistent intraday continuation patterns across futures and "
+        "FX (1980s floor-trader records and modern intraday studies)."
+    )
+
     def generate(self, ticker: str, df: pd.DataFrame) -> Signal:
         if df is None or df.empty or len(df) < 30:
             return self._empty(ticker, self.name)

@@ -38,6 +38,39 @@ class InsideBarBreakout(BaseStrategy):
     modes = ["day"]
     asset_classes = ["all"]
 
+    typical_hold = "Same day, sometimes brief overnight (1–8 hourly bars)"
+    typical_hold_bars = (1, 8)
+    exit_rules = [
+        "Price falls back inside the inside-bar range on next close — "
+        "failed expansion; exit immediately.",
+        "Standard 2R take-profit. Often the expansion runs further — "
+        "consider a 2× ATR trailing stop after the first +1R.",
+        "Session close — exit if no expansion happened that day.",
+        "Volume dries up mid-move — the expansion is exhausted.",
+    ]
+    watch_for = [
+        "Catalysts during the compression — news, earnings, macro "
+        "release scheduled today. Catalysts typically release the "
+        "squeeze in the direction of the news.",
+        "Volume on the inside bar — should be lower than the reference "
+        "bar (genuine compression). High-volume inside bars often fail.",
+        "Higher-timeframe location — IB at a daily resistance level "
+        "before breakout = stronger setup than IB in the middle of nowhere.",
+        "Time of day — IBs that form in the last hour are weakest; "
+        "morning compressions resolve cleanest.",
+    ]
+    why_it_works = (
+        "Volatility is cyclical: compression always precedes expansion. "
+        "An inside bar is by definition a contraction — price is "
+        "consolidating tighter than the prior bar's range. Add the NR4 "
+        "(narrowest range of last 4 bars) constraint and you've isolated "
+        "moments when implied/realised volatility is at a local low. "
+        "Crabel's 1980s research on commodity and bond futures showed "
+        "that the *next* expansion is statistically larger than average. "
+        "Direction is the harder part — trend filters and catalyst "
+        "context disambiguate."
+    )
+
     def generate(self, ticker: str, df: pd.DataFrame) -> Signal:
         if df is None or df.empty or len(df) < 6:
             return self._empty(ticker, self.name)

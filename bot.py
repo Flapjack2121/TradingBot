@@ -289,9 +289,9 @@ def render_strategy_subtab(strategy_name: str, df_all: pd.DataFrame,
     render_signal_table(view)
 
     if not view.empty:
-        st.markdown("##### 🔎 Per-ticker rationale")
+        st.markdown("##### 🔎 Per-ticker detail")
         pick = st.selectbox(
-            "Select ticker for full rationale",
+            "Select ticker for full detail",
             view["Ticker"].tolist(),
             key=f"pick_{mode_key}_{strategy_name}",
         )
@@ -300,19 +300,50 @@ def render_strategy_subtab(strategy_name: str, df_all: pd.DataFrame,
         if sig is not None:
             color = {SIDE_BUY: "#3fb950", SIDE_WAIT: "#8b949e",
                      SIDE_AVOID: "#f85149"}[sig.side]
+            cls = REGISTRY.get(strategy_name)
+            hold_line = (
+                f" · ⏱️ hold {cls.typical_hold}" if cls and cls.typical_hold != "—" else ""
+            )
             st.markdown(
-                f"<div style='border-left:4px solid {color};padding:8px 14px;"
+                f"<div style='border-left:4px solid {color};padding:10px 16px;"
                 f"background:#161b22;border-radius:6px;'>"
                 f"<b style='color:{color};'>{sig.side}</b> · "
                 f"<span style='color:#8b949e;'>confidence {sig.confidence:.0%}"
                 + (f" · {sig.asset_class}" if sig.asset_class else "")
+                + hold_line
                 + f"</span><br>{sig.rationale}</div>",
                 unsafe_allow_html=True,
             )
-            with st.expander("Conditions checked"):
+
+            if sig.entry is not None:
+                m = st.columns(4)
+                m[0].metric("Entry", f"{sig.entry:.4f}")
+                m[1].metric("Stop Loss", f"{sig.stop_loss:.4f}" if sig.stop_loss else "—")
+                m[2].metric("Take Profit", f"{sig.take_profit:.4f}" if sig.take_profit else "—")
+                m[3].metric("R-Multiple", f"{sig.r_multiple}R" if sig.r_multiple else "—")
+
+            with st.expander("✅ Conditions checked"):
                 for k, v in sig.reasons.items():
                     icon = "✅" if v else "❌"
                     st.markdown(f"- {icon} {k}")
+
+            # Strategy playbook for this specific signal
+            if cls and (cls.exit_rules or cls.watch_for or cls.why_it_works):
+                with st.expander("📖 Trade playbook — when to exit, what to watch"):
+                    cols = st.columns(2)
+                    with cols[0]:
+                        if cls.exit_rules:
+                            st.markdown("**🎯 Exit when:**")
+                            for rule in cls.exit_rules:
+                                st.markdown(f"- {rule}")
+                    with cols[1]:
+                        if cls.watch_for:
+                            st.markdown("**👀 Watch for:**")
+                            for w in cls.watch_for:
+                                st.markdown(f"- {w}")
+                    if cls.why_it_works:
+                        st.markdown("**💡 Why this works**")
+                        st.caption(cls.why_it_works)
 
 
 def render_mode_view(mode_key: str) -> None:
@@ -362,8 +393,9 @@ def render_mode_view(mode_key: str) -> None:
     actionable = engine.actionable(signals)
     asset_classes = sorted(set(ticker_class.values())) or ["—"]
 
-    # Per-strategy "info card": label, source, suitability chips, params.
-    with st.expander("🧠 Active strategies — sources, suitability & parameters"):
+    # Per-strategy "info card": label, source, suitability chips, params,
+    # plus the full playbook (hold / exit / watch / why).
+    with st.expander("🧠 Active strategies — sources, playbook & parameters"):
         st.caption(
             "ℹ️ All systems below are documented in published trader/academic "
             "literature with historical edge. **No guarantee of future returns.** "
@@ -381,18 +413,40 @@ def render_mode_view(mode_key: str) -> None:
                 f"margin-right:4px;'>{ac}</span>"
                 for ac in classes_for_chip
             )
+            hold_chip = (
+                f"<span style='background:#1f2a3a;color:#58a6ff;"
+                f"padding:2px 8px;border-radius:10px;font-size:0.75rem;"
+                f"margin-right:4px;'>⏱️ {cls.typical_hold}</span>"
+            ) if cls.typical_hold and cls.typical_hold != "—" else ""
             st.markdown(
-                f"**{cls.label}** {chip_html}",
+                f"### {cls.label} {hold_chip}{chip_html}",
                 unsafe_allow_html=True,
             )
             if cls.description:
                 st.caption(cls.description)
             if cls.source:
                 st.caption(f"📚 *{cls.source}*")
-            if params:
-                st.json(params)
-            else:
-                st.caption("(defaults)")
+
+            cols = st.columns(2)
+            with cols[0]:
+                if cls.exit_rules:
+                    st.markdown("**🎯 Exit when:**")
+                    for rule in cls.exit_rules:
+                        st.markdown(f"- {rule}")
+            with cols[1]:
+                if cls.watch_for:
+                    st.markdown("**👀 Watch for:**")
+                    for w in cls.watch_for:
+                        st.markdown(f"- {w}")
+            if cls.why_it_works:
+                st.markdown("**💡 Why this works**")
+                st.caption(cls.why_it_works)
+
+            with st.expander("⚙️ Parameters in use"):
+                if params:
+                    st.json(params)
+                else:
+                    st.caption("(class defaults)")
             st.markdown("---")
 
     # Sub-tabs ------------------------------------------------------------
@@ -592,9 +646,21 @@ def render_mode_view(mode_key: str) -> None:
                 key=f"lab_cash_{mode_key}",
             )
         with col6:
+            # Default max-hold from the picked strategy's own playbook,
+            # falling back to the mode's global default.
+            strat_cls = REGISTRY.get(lab_strat_name)
+            strat_default_hold = (
+                strat_cls.typical_hold_bars[1] if strat_cls and strat_cls.typical_hold_bars
+                else mode_info["max_hold_bars"]
+            )
             lab_max_hold = st.slider(
-                "Max hold (bars)", 5, 250, mode_info["max_hold_bars"], 5,
+                "Max hold (bars)", 5, 250,
+                min(max(int(strat_default_hold), 5), 250), 5,
                 key=f"lab_hold_{mode_key}",
+                help=(
+                    f"Default from strategy playbook: "
+                    f"{strat_cls.typical_hold if strat_cls else '—'}"
+                ),
             )
         with col7:
             st.metric("Estimated total capital",

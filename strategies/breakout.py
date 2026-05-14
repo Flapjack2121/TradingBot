@@ -42,6 +42,42 @@ class TurtleSystem(BaseStrategy):
     # generalised across all liquid asset classes. Robustly published edge.
     asset_classes = ["all"]
 
+    typical_hold = "Weeks to months (20–100 days) — fat-tailed: most exits "
+    typical_hold = (
+        "Weeks to months (20–100+ days) — most trades exit fast on the "
+        "10-day low stop; the few that don't can run for half a year."
+    )
+    typical_hold_bars = (20, 100)
+    exit_rules = [
+        "Close < prior 10-bar low — official Turtle S1 exit. Take it.",
+        "Pyramid: add up to 4 units at +0.5N intervals above entry "
+        "(original Turtle rule, optional).",
+        "Stop loss = entry − 2N (2× ATR) — engine-managed.",
+        "Heat limit: never have more than 6 'units' of exposure correlated "
+        "across markets (e.g. all gold-related = one bucket).",
+    ]
+    watch_for = [
+        "Volume on the breakout bar — high volume = institutional "
+        "participation = higher follow-through probability.",
+        "False breakouts: ~60–70 % of N-bar breakouts fail. Accept this; "
+        "the edge is in not capping the winners.",
+        "Correlation cluster — if you take 4 long breakouts and they're all "
+        "gold, silver, copper, platinum, that's one trade not four.",
+        "Macro context for commodities — interest rates, USD strength, "
+        "inventory reports (oil, ag).",
+    ]
+    why_it_works = (
+        "Asset returns are fat-tailed — most price moves are small, but a "
+        "small number are huge. Trend-following captures the right tail. "
+        "The Turtles' 1983–1988 published results showed ~80 % annual "
+        "returns with the S1+S2 systems on commodities/FX. The edge has "
+        "shrunk on US equities since publication but is documented to "
+        "persist across asset classes (CTA index, AQR's 'A Century of "
+        "Trend Following', 2017). Discipline matters more than the "
+        "parameters: the system loses on most trades and makes everything "
+        "on a few."
+    )
+
     def generate(self, ticker: str, df: pd.DataFrame) -> Signal:
         if df is None or df.empty or len(df) < 210:
             return self._empty(ticker, self.name)

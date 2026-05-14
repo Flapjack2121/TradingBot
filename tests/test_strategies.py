@@ -106,6 +106,21 @@ def test_every_strategy_declares_asset_classes_and_source() -> None:
         assert cls.source, f"{name} missing source attribution"
 
 
+def test_every_strategy_has_playbook_metadata() -> None:
+    """Each strategy must teach the trader what to do after entering."""
+    for name, cls in REGISTRY.items():
+        assert cls.typical_hold and cls.typical_hold != "—", \
+            f"{name} missing typical_hold"
+        assert isinstance(cls.typical_hold_bars, tuple) \
+               and len(cls.typical_hold_bars) == 2, \
+            f"{name} typical_hold_bars must be a (min,max) tuple"
+        lo, hi = cls.typical_hold_bars
+        assert 0 < lo <= hi, f"{name} hold range invalid: {cls.typical_hold_bars}"
+        assert cls.exit_rules, f"{name} missing exit_rules"
+        assert cls.watch_for, f"{name} missing watch_for"
+        assert cls.why_it_works, f"{name} missing why_it_works"
+
+
 def test_suits_universal_and_specific() -> None:
     from strategies import TurtleSystem, ConnorsRSI2
     assert TurtleSystem.suits("Forex")          # universal
